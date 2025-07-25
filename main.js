@@ -130,6 +130,15 @@ document.addEventListener('keyup', (e) => {
     pressedKeys[e.key] = false
 })
 
+function checkCollision(rect1, rect2) {
+    return (
+        rect1.x < rect2.x + rect2.width - 4 &&
+        rect1.x + rect1.width + 4 > rect2.x &&
+        rect1.y < rect2.y + rect2.height - 4 &&
+        rect1.y + rect1.height + 4 > rect2.y
+    )
+}
+
 function generateRoadSegment(previousSegment) {
     const minWidthChange = -16
     const maxWidthChange = 16
@@ -205,15 +214,6 @@ function generateTree() {
         height: TREE_HEIGHT,
         side: side,
     }
-}
-
-function checkCollision(rect1, rect2) {
-    return (
-        rect1.x < rect2.x + rect2.width - 4 &&
-        rect1.x + rect1.width + 4 > rect2.x &&
-        rect1.y < rect2.y + rect2.height - 4 &&
-        rect1.y + rect1.height + 4 > rect2.y
-    )
 }
 
 function update() {
