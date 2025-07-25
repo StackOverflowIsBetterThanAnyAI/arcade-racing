@@ -376,7 +376,8 @@ function drawScores() {
     ctx.textAlign = 'right'
     ctx.fillText(scoreText, GAME_WIDTH - 16, 32)
 
-    const highScoreText = 'Highscore: ' + highScore
+    const highScoreText =
+        score >= highScore ? 'New Highscore!' : 'Highscore: ' + highScore
     ctx.font = '24px Arial'
     ctx.textAlign = 'left'
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
@@ -567,7 +568,6 @@ function gameLoop() {
     if (!gameStarted) {
         draw()
         drawStartScreen()
-        requestAnimationFrame(gameLoop)
         return
     }
 
@@ -576,5 +576,3 @@ function gameLoop() {
     drawScores()
     requestAnimationFrame(gameLoop)
 }
-
-gameLoop()
