@@ -65,9 +65,9 @@ for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
         y: i * road.segmentHeight,
         width: road.width,
         x: (GAME_WIDTH - road.width) / 2,
+        shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
     })
 }
-
 let obstacles = []
 const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
@@ -155,10 +155,16 @@ function generateRoadSegment(previousSegment) {
         (Math.random() * (maxOffsetChange * 2) - maxOffsetChange)
     newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
 
+    let stripeColor =
+        previousSegment.shoulderStripeColor === '#f50000ff'
+            ? '#f1f1f1ff'
+            : '#f50000ff'
+
     return {
         y: previousSegment.y - road.segmentHeight,
         width: newWidth,
         x: newX,
+        shoulderStripeColor: stripeColor,
     }
 }
 
@@ -340,7 +346,7 @@ function update() {
 function drawGameOver() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-    ctx.fillStyle = 'white'
+    ctx.fillStyle = '#f1f1f1ff'
     ctx.textAlign = 'center'
 
     if (newHighScoreAchieved) {
@@ -373,7 +379,7 @@ function drawObstacles() {
         ctx.beginPath()
         ctx.ellipse(
             obstacle.x + obstacle.width / 2,
-            roundedY + obstacle.height - 4,
+            roundedY + obstacle.height - 8,
             obstacle.width / 2.4,
             16,
             0,
@@ -458,7 +464,7 @@ function drawStartScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
 
-    ctx.fillStyle = 'white'
+    ctx.fillStyle = '#f1f1f1ff'
     ctx.textAlign = 'center'
 
     ctx.font = 'bold 48px Arial'
@@ -490,7 +496,7 @@ function drawScores() {
         textWidth + padding * 2,
         24 + padding * 2
     )
-    ctx.fillStyle = 'white'
+    ctx.fillStyle = '#f1f1f1ff'
     ctx.textAlign = 'right'
     ctx.fillText(scoreText, GAME_WIDTH - 16, 32)
 
@@ -505,7 +511,7 @@ function drawScores() {
         ctx.measureText(highScoreText).width + padding * 2,
         24 + padding * 2
     )
-    ctx.fillStyle = 'white'
+    ctx.fillStyle = '#f1f1f1ff'
     ctx.fillText(highScoreText, 16, 32)
 }
 
@@ -524,7 +530,7 @@ function drawSegments() {
         )
 
         const shoulderStripeWidth = 8
-        ctx.fillStyle = '#f1f1f1ff'
+        ctx.fillStyle = segment.shoulderStripeColor
         ctx.fillRect(
             segment.x - shoulderStripeWidth,
             roundedY,
