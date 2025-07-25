@@ -70,7 +70,7 @@ let obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
 const MIN_OBSTACLE_SPAWN_RATE = 8
 let segmentsSinceLastObstacle = 0
 
-const TREE_SPAWN_INTERVAL = 16
+const TREE_SPAWN_INTERVAL = 8
 let segmentsSinceLastTree = 0
 const TREE_WIDTH = 64
 const TREE_HEIGHT = 64
