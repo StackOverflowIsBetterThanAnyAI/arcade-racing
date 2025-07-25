@@ -104,6 +104,7 @@ function resetGame() {
 
     obstacles = []
     trees = []
+    segmentsSinceLastTree = 0
     score = 0
     segmentsSinceLastObstacle = 0
     obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
@@ -279,7 +280,7 @@ function update() {
             road.speed = parseFloat((road.speed + 0.5).toFixed(1))
         }
         if (obstacle_spanw_interval > MIN_OBSTACLE_SPAWN_RATE) {
-            obstacle_spanw_interval -= 2
+            obstacle_spanw_interval -= 4
         }
         speedIncreasedForThisMilestone = true
     } else if (score % 100 !== 0) {
