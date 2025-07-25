@@ -430,21 +430,21 @@ function update() {
                 )
                 segmentsSinceLastObstacle = 0
             }
+        }
 
-            segmentsSinceLastTree++
-            if (segmentsSinceLastTree >= TREE_SPAWN_INTERVAL) {
-                trees.push(generateTree())
-                segmentsSinceLastTree = 0
-            }
+        segmentsSinceLastTree++
+        if (segmentsSinceLastTree >= TREE_SPAWN_INTERVAL) {
+            trees.push(generateTree())
+            segmentsSinceLastTree = 0
+        }
 
-            segmentsSinceLastRipple++
-            if (segmentsSinceLastRipple >= RIPPLE_SPAWN_INTERVAL) {
-                const numRipplesToSpawn = Math.floor(Math.random() * 7) + 1
-                for (let i = 0; i < numRipplesToSpawn; i++) {
-                    ripples.push(generateRipple(lastSegment))
-                }
-                segmentsSinceLastRipple = 0
+        segmentsSinceLastRipple++
+        if (segmentsSinceLastRipple >= RIPPLE_SPAWN_INTERVAL) {
+            const numRipplesToSpawn = Math.floor(Math.random() * 7) + 1
+            for (let i = 0; i < numRipplesToSpawn; i++) {
+                ripples.push(generateRipple(lastSegment))
             }
+            segmentsSinceLastRipple = 0
         }
     }
 
