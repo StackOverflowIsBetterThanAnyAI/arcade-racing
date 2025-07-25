@@ -423,6 +423,22 @@ function draw() {
     ctx.fill()
     ctx.restore()
 
+    ctx.save()
+    ctx.filter = 'blur(4px)'
+    ctx.fillStyle = 'rgba(255, 115, 0, 0.2)'
+    ctx.beginPath()
+    ctx.ellipse(
+        player.x + player.width / 2,
+        player.y + player.height,
+        player.width / 3.6,
+        32,
+        0,
+        0,
+        Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+
     for (let i = 0; i < ghostTrail.length; i++) {
         const ghost = ghostTrail[i]
         const alpha = ((i + 1) / (ghostTrail.length + 1)) * 0.7
