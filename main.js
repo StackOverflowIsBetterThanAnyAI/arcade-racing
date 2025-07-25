@@ -54,9 +54,6 @@ let road = { ...INITIAL_ROAD_STATE }
 let ghostTrail = []
 const GHOST_LENGTH = 8
 
-let blinkTimer = 0
-const BLINK_INTERVAL = 64
-
 const pressedKeys = {}
 
 let roadSegments = createInitialRoadSegments()
@@ -108,7 +105,6 @@ function resetGame() {
     newHighScoreAchieved = false
     speedIncreasedForThisMilestone = false
     ghostTrail = []
-    blinkTimer = 0
     shouldDrawDash = true
     roadSegments = createInitialRoadSegments()
 
@@ -419,12 +415,11 @@ function drawObstacles() {
 
 function drawPlayer() {
     const roundedPlayerY = Math.round(player.y)
-    blinkTimer = (blinkTimer + 1) % BLINK_INTERVAL
-    const alpha = blinkTimer < BLINK_INTERVAL / 2 ? 0.7 : 0.1
+    const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
 
     ctx.save()
     ctx.filter = 'blur(4px)'
-    ctx.fillStyle = `rgba(255, 85, 0, ${alpha})`
+    ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
     ctx.beginPath()
     ctx.ellipse(
         player.x + player.width / 2,
