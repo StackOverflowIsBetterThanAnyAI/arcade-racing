@@ -78,10 +78,8 @@ let segmentsSinceLastObstacle = 0
 
 const TREE_SPAWN_INTERVAL = 16
 let segmentsSinceLastTree = 0
-
 const TREE_WIDTH = 64
 const TREE_HEIGHT = 64
-
 let trees = []
 
 let score = 0
@@ -105,12 +103,14 @@ function resetGame() {
     }
 
     obstacles = []
+    trees = []
     score = 0
     segmentsSinceLastObstacle = 0
     obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
     isGameOver = false
     newHighScoreAchieved = false
     speedIncreasedForThisMilestone = false
+    ghostTrail = []
 
     gameLoop()
 }
