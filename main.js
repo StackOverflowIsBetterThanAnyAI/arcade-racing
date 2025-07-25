@@ -43,7 +43,7 @@ const INITIAL_ROAD_STATE = {
     segmentHeight: 32,
     speed: 2,
     color: '#888',
-    shoulderColor: '#444',
+    shoulderColor: '#437a55ff',
 }
 
 const MAX_ROAD_SPEED = 5
@@ -53,6 +53,10 @@ let road = { ...INITIAL_ROAD_STATE }
 
 let ghostTrail = []
 const GHOST_LENGTH = 8
+
+const MIN_WIDTH_CHANGE = -16
+const MAX_WIDTH_CHANGE = 16
+const MAX_OFFSET_CHANGE = 24
 
 const pressedKeys = {}
 
@@ -66,15 +70,23 @@ let obstacles = []
 const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
 const INITIAL_OBSTACLE_SPAWN_INTERVAL = 48
-let obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
+let obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
 const MIN_OBSTACLE_SPAWN_RATE = 8
 let segmentsSinceLastObstacle = 0
+
+const COLLISION_TOLERANCE = 4
 
 const TREE_SPAWN_INTERVAL = 8
 let segmentsSinceLastTree = 0
 const TREE_WIDTH = 64
 const TREE_HEIGHT = 64
 let trees = []
+
+let ripples = []
+const RIPPLE_SPAWN_INTERVAL = 1
+let segmentsSinceLastRipple = 0
+const RIPPLE_MIN_RADIUS = 2
+const RIPPLE_MAX_RADIUS = 8
 
 let score = 0
 let highScore = parseInt(localStorage.getItem('highScore')) || 0
@@ -96,12 +108,14 @@ function resetGame() {
     segmentsSinceLastTree = 0
     score = 0
     segmentsSinceLastObstacle = 0
-    obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
+    obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
     isGameOver = false
     newHighScoreAchieved = false
     speedIncreasedForThisMilestone = false
     ghostTrail = []
     shouldDrawDash = true
+    ripples = []
+    segmentsSinceLastRipple = 0
 
     gameLoop()
 }
@@ -123,10 +137,10 @@ document.addEventListener('keyup', (e) => {
 
 function checkCollision(rect1, rect2) {
     return (
-        rect1.x < rect2.x + rect2.width - 4 &&
-        rect1.x + rect1.width + 4 > rect2.x &&
-        rect1.y < rect2.y + rect2.height - 4 &&
-        rect1.y + rect1.height + 4 > rect2.y
+        rect1.x < rect2.x + rect2.width - COLLISION_TOLERANCE &&
+        rect1.x + rect1.width + COLLISION_TOLERANCE > rect2.x &&
+        rect1.y < rect2.y + rect2.height - COLLISION_TOLERANCE &&
+        rect1.y + rect1.height + COLLISION_TOLERANCE > rect2.y
     )
 }
 
@@ -156,6 +170,30 @@ function createInitialRoadSegments() {
     return segments
 }
 
+function generateRipple(roadSegment) {
+    const rippleRadius =
+        Math.random() * (RIPPLE_MAX_RADIUS - RIPPLE_MIN_RADIUS) +
+        RIPPLE_MIN_RADIUS
+    const rippleWidth = rippleRadius * 2
+    const rippleHeight = rippleRadius * 2
+
+    const rippleX =
+        roadSegment.x + Math.random() * (roadSegment.width - rippleWidth)
+    const rippleY = -rippleHeight - Math.random() * GAME_HEIGHT * 0.1
+
+    const alpha = Math.random() * 0.3 + 0.1
+    const grey = Math.floor(Math.random() * 100) + 20
+
+    return {
+        x: rippleX,
+        y: rippleY,
+        width: rippleWidth,
+        height: rippleHeight,
+        radius: rippleRadius,
+        color: `rgba(${grey}, ${grey}, ${grey}, ${alpha.toFixed(2)})`,
+    }
+}
+
 function generateRoadSegment(previousSegment) {
     if (initialSegmentsCount > 0) {
         initialSegmentsCount--
@@ -175,18 +213,15 @@ function generateRoadSegment(previousSegment) {
             isDashed: shouldDrawDash,
         }
     } else {
-        const minWidthChange = -16
-        const maxWidthChange = 16
-        const maxOffsetChange = 24
-
         let newWidth =
             previousSegment.width +
-            (Math.random() * (maxWidthChange - minWidthChange) + minWidthChange)
+            (Math.random() * (MAX_WIDTH_CHANGE - MIN_WIDTH_CHANGE) +
+                MIN_WIDTH_CHANGE)
         newWidth = Math.max(Math.min(MAX_ROAD_WIDTH, newWidth), MIN_ROAD_WIDTH)
 
         let newX =
             previousSegment.x +
-            (Math.random() * (maxOffsetChange * 2) - maxOffsetChange)
+            (Math.random() * (MAX_OFFSET_CHANGE * 2) - MAX_OFFSET_CHANGE)
         newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
 
         let stripeColor =
@@ -323,6 +358,10 @@ function update() {
         trees[i].y += road.speed
     }
 
+    for (let i = 0; i < ripples.length; i++) {
+        ripples[i].y += road.speed
+    }
+
     if (roadSegments[0].y > GAME_HEIGHT) {
         roadSegments.shift()
     }
@@ -335,7 +374,7 @@ function update() {
             score++
 
             segmentsSinceLastObstacle++
-            if (segmentsSinceLastObstacle >= obstacle_spanw_interval) {
+            if (segmentsSinceLastObstacle >= obstacle_spawn_interval) {
                 obstacles.push(
                     generateObstacle(roadSegments[roadSegments.length - 1])
                 )
@@ -347,17 +386,21 @@ function update() {
                 trees.push(generateTree())
                 segmentsSinceLastTree = 0
             }
+
+            segmentsSinceLastRipple++
+            if (segmentsSinceLastRipple >= RIPPLE_SPAWN_INTERVAL) {
+                ripples.push(generateRipple(lastSegment))
+                segmentsSinceLastRipple = 0
+            }
         }
     }
-
-    trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
 
     if (score > 0 && score % 100 === 0 && !speedIncreasedForThisMilestone) {
         if (road.speed < MAX_ROAD_SPEED) {
             road.speed = parseFloat((road.speed + 0.5).toFixed(1))
         }
-        if (obstacle_spanw_interval > MIN_OBSTACLE_SPAWN_RATE) {
-            obstacle_spanw_interval -= 4
+        if (obstacle_spawn_interval > MIN_OBSTACLE_SPAWN_RATE) {
+            obstacle_spawn_interval -= 4
         }
         speedIncreasedForThisMilestone = true
     } else if (score % 100 !== 0) {
@@ -371,6 +414,8 @@ function update() {
         }
     }
 
+    trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
+    ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
     updateGhostTrail()
@@ -598,6 +643,25 @@ function drawSegments() {
     }
 }
 
+function drawRipples() {
+    for (const ripple of ripples) {
+        const roundedY = Math.round(ripple.y)
+        ctx.save()
+
+        ctx.fillStyle = ripple.color
+        ctx.beginPath()
+        ctx.arc(
+            ripple.x + ripple.radius,
+            roundedY + ripple.radius,
+            ripple.radius,
+            0,
+            Math.PI * 2
+        )
+        ctx.fill()
+        ctx.restore()
+    }
+}
+
 function drawTrees() {
     for (const tree of trees) {
         const roundedY = Math.round(tree.y)
@@ -628,6 +692,7 @@ function draw() {
 
     drawSegments()
     drawTrees()
+    drawRipples()
     drawObstacles()
     drawPlayer()
 
