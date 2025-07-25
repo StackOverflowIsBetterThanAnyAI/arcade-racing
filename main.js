@@ -22,7 +22,7 @@ const totalImages = 3
 function onImageLoad() {
     imagesLoaded++
     if (imagesLoaded === totalImages) {
-        gameLoop()
+        resetGame()
     }
 }
 
@@ -56,7 +56,8 @@ const GHOST_LENGTH = 8
 
 const pressedKeys = {}
 
-let roadSegments = createInitialRoadSegments()
+let initialSegmentsCount
+let roadSegments = []
 const MAX_ROAD_WIDTH = 448
 const MIN_ROAD_WIDTH = 256
 let shouldDrawDash = true
@@ -87,13 +88,8 @@ function resetGame() {
     road = { ...INITIAL_ROAD_STATE }
 
     roadSegments = []
-    for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
-        roadSegments.push({
-            y: i * road.segmentHeight,
-            width: road.width,
-            x: (GAME_WIDTH - road.width) / 2,
-        })
-    }
+    initialSegmentsCount = Math.ceil(GAME_HEIGHT / road.segmentHeight)
+    roadSegments = createInitialRoadSegments()
 
     obstacles = []
     trees = []
@@ -106,7 +102,6 @@ function resetGame() {
     speedIncreasedForThisMilestone = false
     ghostTrail = []
     shouldDrawDash = true
-    roadSegments = createInitialRoadSegments()
 
     gameLoop()
 }
@@ -135,14 +130,24 @@ function checkCollision(rect1, rect2) {
     )
 }
 
+function checkNewHighScore() {
+    if (score > highScore) {
+        highScore = score
+        localStorage.setItem('highScore', highScore)
+        newHighScoreAchieved = true
+    }
+}
+
 function createInitialRoadSegments() {
     let segments = []
-    let shouldDrawDash = true
-    for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
+    const initialRoadWidth = INITIAL_ROAD_STATE.width
+    const initialRoadX = (GAME_WIDTH - initialRoadWidth) / 2
+
+    for (let i = 0; i < initialSegmentsCount; i++) {
         segments.push({
             y: i * road.segmentHeight,
-            width: road.width,
-            x: (GAME_WIDTH - road.width) / 2,
+            width: initialRoadWidth,
+            x: initialRoadX,
             shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
             isDashed: shouldDrawDash,
         })
@@ -152,33 +157,52 @@ function createInitialRoadSegments() {
 }
 
 function generateRoadSegment(previousSegment) {
-    const minWidthChange = -16
-    const maxWidthChange = 16
-    const maxOffsetChange = 24
+    if (initialSegmentsCount > 0) {
+        initialSegmentsCount--
+        const initialRoadWidth = INITIAL_ROAD_STATE.width
+        const initialRoadX = (GAME_WIDTH - initialRoadWidth) / 2
 
-    let newWidth =
-        previousSegment.width +
-        (Math.random() * (maxWidthChange - minWidthChange) + minWidthChange)
-    newWidth = Math.max(Math.min(MAX_ROAD_WIDTH, newWidth), MIN_ROAD_WIDTH)
+        shouldDrawDash = !shouldDrawDash
 
-    let newX =
-        previousSegment.x +
-        (Math.random() * (maxOffsetChange * 2) - maxOffsetChange)
-    newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
+        return {
+            y: previousSegment.y - road.segmentHeight,
+            width: initialRoadWidth,
+            x: initialRoadX,
+            shoulderStripeColor:
+                previousSegment.shoulderStripeColor === '#f50000ff'
+                    ? '#f1f1f1ff'
+                    : '#f50000ff',
+            isDashed: shouldDrawDash,
+        }
+    } else {
+        const minWidthChange = -16
+        const maxWidthChange = 16
+        const maxOffsetChange = 24
 
-    let stripeColor =
-        previousSegment.shoulderStripeColor === '#f50000ff'
-            ? '#f1f1f1ff'
-            : '#f50000ff'
+        let newWidth =
+            previousSegment.width +
+            (Math.random() * (maxWidthChange - minWidthChange) + minWidthChange)
+        newWidth = Math.max(Math.min(MAX_ROAD_WIDTH, newWidth), MIN_ROAD_WIDTH)
 
-    shouldDrawDash = !shouldDrawDash
+        let newX =
+            previousSegment.x +
+            (Math.random() * (maxOffsetChange * 2) - maxOffsetChange)
+        newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
 
-    return {
-        y: previousSegment.y - road.segmentHeight,
-        width: newWidth,
-        x: newX,
-        shoulderStripeColor: stripeColor,
-        isDashed: shouldDrawDash,
+        let stripeColor =
+            previousSegment.shoulderStripeColor === '#f50000ff'
+                ? '#f1f1f1ff'
+                : '#f50000ff'
+
+        shouldDrawDash = !shouldDrawDash
+
+        return {
+            y: previousSegment.y - road.segmentHeight,
+            width: newWidth,
+            x: newX,
+            shoulderStripeColor: stripeColor,
+            isDashed: shouldDrawDash,
+        }
     }
 }
 
@@ -237,6 +261,38 @@ function generateTree() {
     }
 }
 
+function updateGhostTrail() {
+    let currentPlayerRoadSegment = null
+    for (const segment of roadSegments) {
+        if (
+            player.y + player.height > segment.y &&
+            player.y < segment.y + road.segmentHeight
+        ) {
+            currentPlayerRoadSegment = segment
+            break
+        }
+    }
+
+    ghostTrail.push({ x: player.x, y: player.y })
+
+    if (ghostTrail.length > GHOST_LENGTH) {
+        ghostTrail.shift()
+    }
+
+    if (currentPlayerRoadSegment) {
+        const playerLeft = player.x
+        const playerRight = player.x + player.width
+        const roadLeft = currentPlayerRoadSegment.x
+        const roadRight =
+            currentPlayerRoadSegment.x + currentPlayerRoadSegment.width
+
+        if (playerLeft < roadLeft - 8 || playerRight > roadRight + 8) {
+            isGameOver = true
+            checkNewHighScore()
+        }
+    }
+}
+
 function update() {
     if (isGameOver) {
         return
@@ -269,25 +325,26 @@ function update() {
 
     if (roadSegments[0].y > GAME_HEIGHT) {
         roadSegments.shift()
-        const lastSegment = roadSegments[roadSegments.length - 1]
+    }
+
+    const lastSegment = roadSegments[roadSegments.length - 1]
+    if (lastSegment && lastSegment.y >= -road.segmentHeight) {
         roadSegments.push(generateRoadSegment(lastSegment))
 
-        score++
+        if (initialSegmentsCount <= 0) {
+            score++
 
-        segmentsSinceLastObstacle++
-        if (segmentsSinceLastObstacle >= obstacle_spanw_interval) {
-            const spawnSegment = roadSegments[roadSegments.length - 1]
-            if (spawnSegment) {
-                obstacles.push(generateObstacle(spawnSegment))
+            segmentsSinceLastObstacle++
+            if (segmentsSinceLastObstacle >= obstacle_spanw_interval) {
+                obstacles.push(
+                    generateObstacle(roadSegments[roadSegments.length - 1])
+                )
                 segmentsSinceLastObstacle = 0
             }
-        }
 
-        segmentsSinceLastTree++
-        if (segmentsSinceLastTree >= TREE_SPAWN_INTERVAL) {
-            const spawnSegment = roadSegments[roadSegments.length - 1]
-            if (spawnSegment) {
-                trees.push(generateTree(spawnSegment))
+            segmentsSinceLastTree++
+            if (segmentsSinceLastTree >= TREE_SPAWN_INTERVAL) {
+                trees.push(generateTree())
                 segmentsSinceLastTree = 0
             }
         }
@@ -310,51 +367,13 @@ function update() {
     for (let i = 0; i < obstacles.length; i++) {
         if (checkCollision(player, obstacles[i])) {
             isGameOver = true
-
-            if (score > highScore) {
-                highScore = score
-                localStorage.setItem('highScore', highScore)
-                newHighScoreAchieved = true
-            }
+            checkNewHighScore()
         }
     }
 
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
-    let currentPlayerRoadSegment = null
-    for (const segment of roadSegments) {
-        if (
-            player.y + player.height > segment.y &&
-            player.y < segment.y + road.segmentHeight
-        ) {
-            currentPlayerRoadSegment = segment
-            break
-        }
-    }
-
-    ghostTrail.push({ x: player.x, y: player.y })
-
-    if (ghostTrail.length > GHOST_LENGTH) {
-        ghostTrail.shift()
-    }
-
-    if (currentPlayerRoadSegment) {
-        const playerLeft = player.x
-        const playerRight = player.x + player.width
-        const roadLeft = currentPlayerRoadSegment.x
-        const roadRight =
-            currentPlayerRoadSegment.x + currentPlayerRoadSegment.width
-
-        if (playerLeft < roadLeft - 8 || playerRight > roadRight + 8) {
-            isGameOver = true
-
-            if (score > highScore) {
-                highScore = score
-                localStorage.setItem('highScore', highScore)
-                newHighScoreAchieved = true
-            }
-        }
-    }
+    updateGhostTrail()
 }
 
 function drawGameOver() {
