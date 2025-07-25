@@ -56,18 +56,11 @@ const GHOST_LENGTH = 8
 
 const pressedKeys = {}
 
-let roadSegments = []
+let roadSegments = createInitialRoadSegments()
 const MAX_ROAD_WIDTH = 448
 const MIN_ROAD_WIDTH = 256
+let shouldDrawDash = true
 
-for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
-    roadSegments.push({
-        y: i * road.segmentHeight,
-        width: road.width,
-        x: (GAME_WIDTH - road.width) / 2,
-        shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
-    })
-}
 let obstacles = []
 const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
@@ -112,6 +105,8 @@ function resetGame() {
     newHighScoreAchieved = false
     speedIncreasedForThisMilestone = false
     ghostTrail = []
+    shouldDrawDash = true
+    roadSegments = createInitialRoadSegments()
 
     gameLoop()
 }
@@ -140,6 +135,22 @@ function checkCollision(rect1, rect2) {
     )
 }
 
+function createInitialRoadSegments() {
+    let segments = []
+    let shouldDrawDash = true
+    for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
+        segments.push({
+            y: i * road.segmentHeight,
+            width: road.width,
+            x: (GAME_WIDTH - road.width) / 2,
+            shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
+            isDashed: shouldDrawDash,
+        })
+        shouldDrawDash = !shouldDrawDash
+    }
+    return segments
+}
+
 function generateRoadSegment(previousSegment) {
     const minWidthChange = -16
     const maxWidthChange = 16
@@ -160,11 +171,14 @@ function generateRoadSegment(previousSegment) {
             ? '#f1f1f1ff'
             : '#f50000ff'
 
+    shouldDrawDash = !shouldDrawDash
+
     return {
         y: previousSegment.y - road.segmentHeight,
         width: newWidth,
         x: newX,
         shoulderStripeColor: stripeColor,
+        isDashed: shouldDrawDash,
     }
 }
 
@@ -546,6 +560,20 @@ function drawSegments() {
 
         ctx.fillStyle = road.color
         ctx.fillRect(segment.x, roundedY, segment.width, road.segmentHeight)
+
+        if (segment.isDashed) {
+            ctx.strokeStyle = '#f1f1f1ff'
+            ctx.lineWidth = 8
+            ctx.setLineDash([24, 32])
+            ctx.beginPath()
+            ctx.moveTo(segment.x + segment.width / 2, segment.y)
+            ctx.lineTo(
+                segment.x + segment.width / 2,
+                segment.y + road.segmentHeight
+            )
+            ctx.stroke()
+            ctx.setLineDash([])
+        }
     }
 }
 
