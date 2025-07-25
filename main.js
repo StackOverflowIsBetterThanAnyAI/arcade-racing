@@ -88,6 +88,8 @@ let score = 0
 let highScore = parseInt(localStorage.getItem('highScore')) || 0
 let newHighScoreAchieved = false
 let isGameOver = false
+let gameStarted = false
+let speedIncreasedForThisMilestone = false
 
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
@@ -108,6 +110,7 @@ function resetGame() {
     obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
     isGameOver = false
     newHighScoreAchieved = false
+    speedIncreasedForThisMilestone = false
 
     gameLoop()
 }
@@ -116,6 +119,10 @@ document.addEventListener('keydown', (e) => {
     pressedKeys[e.key] = true
     if ((isGameOver && e.key === 'r') || e.key === 'R') {
         resetGame()
+    }
+    if (!gameStarted && e.key === ' ') {
+        gameStarted = true
+        gameLoop()
     }
 })
 
@@ -267,13 +274,16 @@ function update() {
 
     trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
 
-    if (score > 0 && score % 100 === 0) {
+    if (score > 0 && score % 100 === 0 && !speedIncreasedForThisMilestone) {
         if (road.speed < MAX_ROAD_SPEED) {
-            road.speed = parseFloat((road.speed + 0.1).toFixed(1))
+            road.speed = parseFloat((road.speed + 0.5).toFixed(1))
         }
         if (obstacle_spanw_interval > MIN_OBSTACLE_SPAWN_RATE) {
             obstacle_spanw_interval -= 2
         }
+        speedIncreasedForThisMilestone = true
+    } else if (score % 100 !== 0) {
+        speedIncreasedForThisMilestone = false
     }
 
     for (let i = 0; i < obstacles.length; i++) {
@@ -324,6 +334,60 @@ function update() {
             }
         }
     }
+}
+
+function drawStartScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+
+    ctx.fillStyle = 'white'
+    ctx.textAlign = 'center'
+
+    ctx.font = 'bold 48px Arial'
+    ctx.fillText('Arcade Racing', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60)
+
+    ctx.font = '32px Arial'
+    ctx.fillText('Press SPACE to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20)
+
+    ctx.font = '24px Arial'
+    ctx.fillText('Use Arrow Keys to Move', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 70)
+
+    const highScoreText = 'Current Highscore: ' + highScore
+    ctx.font = 'bold 28px Arial'
+    ctx.fillText(highScoreText, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140)
+}
+
+function drawScores() {
+    const scoreText = 'Score: ' + score
+    ctx.font = '24px Arial'
+    const textWidth = ctx.measureText(scoreText).width
+    const padding = 8
+    const backgroundX = GAME_WIDTH - textWidth - padding * 3
+    const backgroundY = padding / 2
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillRect(
+        backgroundX,
+        backgroundY,
+        textWidth + padding * 2,
+        24 + padding * 2
+    )
+    ctx.fillStyle = 'white'
+    ctx.textAlign = 'right'
+    ctx.fillText(scoreText, GAME_WIDTH - 16, 32)
+
+    const highScoreText = 'Highscore: ' + highScore
+    ctx.font = '24px Arial'
+    ctx.textAlign = 'left'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillRect(
+        8,
+        backgroundY,
+        ctx.measureText(highScoreText).width + padding * 2,
+        24 + padding * 2
+    )
+    ctx.fillStyle = 'white'
+    ctx.fillText(highScoreText, 16, 32)
 }
 
 function draw() {
@@ -458,39 +522,8 @@ function draw() {
 
     ctx.drawImage(playerImage, player.x, player.y, player.width, player.height)
 
-    const scoreText = 'Score: ' + score
-    ctx.font = '24px Arial'
-    const textWidth = ctx.measureText(scoreText).width
-    const padding = 8
-    const backgroundX = GAME_WIDTH - textWidth - padding * 3
-    const backgroundY = padding / 2
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(
-        backgroundX,
-        backgroundY,
-        textWidth + padding * 2,
-        24 + padding * 2
-    )
-    ctx.fillStyle = 'white'
-    ctx.textAlign = 'right'
-    ctx.fillText(scoreText, GAME_WIDTH - 16, 32)
-
-    const highScoreText = 'Highscore: ' + highScore
-    ctx.font = '24px Arial'
-    ctx.textAlign = 'left'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(
-        8,
-        backgroundY,
-        ctx.measureText(highScoreText).width + padding * 2,
-        24 + padding * 2
-    )
-    ctx.fillStyle = 'white'
-    ctx.fillText(highScoreText, 16, 32)
-
     if (isGameOver) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
         ctx.fillStyle = 'white'
         ctx.textAlign = 'center'
@@ -531,8 +564,16 @@ function gameLoop() {
         return
     }
 
+    if (!gameStarted) {
+        draw()
+        drawStartScreen()
+        requestAnimationFrame(gameLoop)
+        return
+    }
+
     update()
     draw()
+    drawScores()
     requestAnimationFrame(gameLoop)
 }
 
