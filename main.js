@@ -88,6 +88,16 @@ let segmentsSinceLastRipple = 0
 const RIPPLE_MIN_RADIUS = 2
 const RIPPLE_MAX_RADIUS = 8
 
+const RIPPLE_SHOULDER_PADDING = 8
+const RIPPLE_ROAD_BUFFER = 8
+
+const SHOULDER_RIPPLE_COLORS = [
+    { r: 70, g: 120, b: 80 },
+    { r: 100, g: 150, b: 110 },
+    { r: 90, g: 70, b: 50 },
+    { r: 120, g: 90, b: 60 },
+]
+
 let score = 0
 let highScore = parseInt(localStorage.getItem('highScore')) || 0
 let newHighScoreAchieved = false
@@ -170,6 +180,31 @@ function createInitialRoadSegments() {
     return segments
 }
 
+function getRandomGreyColor(alpha) {
+    const grey = Math.floor(Math.random() * 100) + 20
+    return `rgba(${grey}, ${grey}, ${grey}, ${alpha.toFixed(2)})`
+}
+
+function getRandomShoulderColor(alpha) {
+    const randomColor =
+        SHOULDER_RIPPLE_COLORS[
+            Math.floor(Math.random() * SHOULDER_RIPPLE_COLORS.length)
+        ]
+    const r = Math.min(
+        255,
+        Math.max(0, randomColor.r + Math.floor(Math.random() * 40) - 20)
+    )
+    const g = Math.min(
+        255,
+        Math.max(0, randomColor.g + Math.floor(Math.random() * 40) - 20)
+    )
+    const b = Math.min(
+        255,
+        Math.max(0, randomColor.b + Math.floor(Math.random() * 40) - 20)
+    )
+    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`
+}
+
 function generateRipple(roadSegment) {
     const rippleRadius =
         Math.random() * (RIPPLE_MAX_RADIUS - RIPPLE_MIN_RADIUS) +
@@ -177,12 +212,27 @@ function generateRipple(roadSegment) {
     const rippleWidth = rippleRadius * 2
     const rippleHeight = rippleRadius * 2
 
-    const rippleX =
-        roadSegment.x + Math.random() * (roadSegment.width - rippleWidth)
-    const rippleY = -rippleHeight - Math.random() * GAME_HEIGHT * 0.1
-
+    let rippleX
+    let rippleColor
     const alpha = Math.random() * 0.3 + 0.1
-    const grey = Math.floor(Math.random() * 100) + 20
+    const minSpawnX = 0 + RIPPLE_SHOULDER_PADDING
+    const maxSpawnX = GAME_WIDTH - RIPPLE_SHOULDER_PADDING - rippleWidth
+
+    rippleX = Math.random() * (maxSpawnX - minSpawnX) + minSpawnX
+
+    const roadLeftEdge = roadSegment.x
+    const roadRightEdge = roadSegment.x + roadSegment.width
+
+    if (
+        rippleX + rippleWidth > roadLeftEdge + RIPPLE_ROAD_BUFFER &&
+        rippleX < roadRightEdge - RIPPLE_ROAD_BUFFER
+    ) {
+        rippleColor = getRandomGreyColor(alpha)
+    } else {
+        rippleColor = getRandomShoulderColor(alpha)
+    }
+
+    const rippleY = -rippleHeight - Math.random() * GAME_HEIGHT * 0.1
 
     return {
         x: rippleX,
@@ -190,7 +240,7 @@ function generateRipple(roadSegment) {
         width: rippleWidth,
         height: rippleHeight,
         radius: rippleRadius,
-        color: `rgba(${grey}, ${grey}, ${grey}, ${alpha.toFixed(2)})`,
+        color: rippleColor,
     }
 }
 
@@ -389,7 +439,10 @@ function update() {
 
             segmentsSinceLastRipple++
             if (segmentsSinceLastRipple >= RIPPLE_SPAWN_INTERVAL) {
-                ripples.push(generateRipple(lastSegment))
+                const numRipplesToSpawn = Math.floor(Math.random() * 7) + 1
+                for (let i = 0; i < numRipplesToSpawn; i++) {
+                    ripples.push(generateRipple(lastSegment))
+                }
                 segmentsSinceLastRipple = 0
             }
         }
