@@ -8,7 +8,7 @@ canvas.width = GAME_WIDTH
 canvas.height = GAME_HEIGHT
 
 const playerImage = new Image()
-playerImage.src = 'car.png'
+playerImage.src = 'player.png'
 
 const obstacleImage = new Image()
 obstacleImage.src = 'banana.png'
@@ -71,7 +71,7 @@ for (let i = 0; i < GAME_HEIGHT / road.segmentHeight + 2; i++) {
 let obstacles = []
 const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
-const INITIAL_OBSTACLE_SPAWN_INTERVAL = 64
+const INITIAL_OBSTACLE_SPAWN_INTERVAL = 48
 let obstacle_spanw_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
 const MIN_OBSTACLE_SPAWN_RATE = 8
 let segmentsSinceLastObstacle = 0
@@ -336,6 +336,123 @@ function update() {
     }
 }
 
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+    ctx.fillStyle = 'white'
+    ctx.textAlign = 'center'
+
+    if (newHighScoreAchieved) {
+        ctx.font = '24px Arial'
+        ctx.fillText('NEW HIGHSCORE!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 128)
+    } else {
+        ctx.font = '28px Arial'
+        ctx.fillText(
+            'Highscore: ' + highScore,
+            GAME_WIDTH / 2,
+            GAME_HEIGHT / 2 + 128
+        )
+    }
+
+    ctx.font = 'bold 48px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 32)
+
+    ctx.font = '32px Arial'
+    ctx.fillText('Final Score: ' + score, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20)
+    ctx.fillText('Press R to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
+}
+
+function drawObstacles() {
+    for (const obstacle of obstacles) {
+        const roundedY = Math.round(obstacle.y)
+        ctx.save()
+        ctx.filter = 'blur(4px)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+        ctx.beginPath()
+        ctx.ellipse(
+            obstacle.x + obstacle.width / 2,
+            roundedY + obstacle.height - 4,
+            obstacle.width / 2.4,
+            16,
+            0,
+            0,
+            Math.PI * 2
+        )
+        ctx.fill()
+        ctx.restore()
+
+        ctx.drawImage(
+            obstacleImage,
+            obstacle.x,
+            roundedY,
+            obstacle.width,
+            obstacle.height
+        )
+    }
+}
+
+function drawPlayer() {
+    const roundedPlayerY = Math.round(player.y)
+    ctx.save()
+    ctx.filter = 'blur(4px)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.beginPath()
+    ctx.ellipse(
+        player.x + player.width / 2,
+        roundedPlayerY + player.height - 16,
+        player.width / 2.4,
+        24,
+        0,
+        0,
+        Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+
+    ctx.save()
+    ctx.filter = 'blur(4px)'
+    ctx.fillStyle = 'rgba(255, 115, 0, 0.2)'
+    ctx.beginPath()
+    ctx.ellipse(
+        player.x + player.width / 2,
+        roundedPlayerY + player.height,
+        player.width / 3.6,
+        32,
+        0,
+        0,
+        Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+
+    for (let i = 0; i < ghostTrail.length; i++) {
+        const ghost = ghostTrail[i]
+        const alpha = ((i + 1) / (ghostTrail.length + 1)) * 0.7
+
+        const roundedGhostY = Math.round(ghost.y)
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.filter = 'blur(2px) saturate(60%)'
+        ctx.drawImage(
+            playerImage,
+            ghost.x,
+            roundedGhostY,
+            player.width,
+            player.height
+        )
+        ctx.restore()
+    }
+
+    ctx.drawImage(
+        playerImage,
+        player.x,
+        roundedPlayerY,
+        player.width,
+        player.height
+    )
+}
+
 function drawStartScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
@@ -391,17 +508,16 @@ function drawScores() {
     ctx.fillText(highScoreText, 16, 32)
 }
 
-function draw() {
-    ctx.fillStyle = 'black'
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-
+function drawSegments() {
     for (const segment of roadSegments) {
+        const roundedY = Math.round(segment.y)
+
         ctx.fillStyle = road.shoulderColor
-        ctx.fillRect(0, segment.y, segment.x, road.segmentHeight)
+        ctx.fillRect(0, roundedY, segment.x, road.segmentHeight)
 
         ctx.fillRect(
             segment.x + segment.width,
-            segment.y,
+            roundedY,
             GAME_WIDTH - (segment.x + segment.width),
             road.segmentHeight
         )
@@ -410,22 +526,25 @@ function draw() {
         ctx.fillStyle = '#f1f1f1ff'
         ctx.fillRect(
             segment.x - shoulderStripeWidth,
-            segment.y,
+            roundedY,
             shoulderStripeWidth,
             road.segmentHeight
         )
         ctx.fillRect(
             segment.x + segment.width,
-            segment.y,
+            roundedY,
             shoulderStripeWidth,
             road.segmentHeight
         )
 
         ctx.fillStyle = road.color
-        ctx.fillRect(segment.x, segment.y, segment.width, road.segmentHeight)
+        ctx.fillRect(segment.x, roundedY, segment.width, road.segmentHeight)
     }
+}
 
+function drawTrees() {
     for (const tree of trees) {
+        const roundedY = Math.round(tree.y)
         ctx.save()
         ctx.filter = 'blur(4px)'
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
@@ -433,7 +552,7 @@ function draw() {
         ctx.beginPath()
         ctx.ellipse(
             tree.x + tree.width / 2,
-            tree.y + tree.height - 8,
+            roundedY + tree.height - 8,
             tree.width / 1.8,
             16,
             0,
@@ -443,119 +562,21 @@ function draw() {
         ctx.fill()
         ctx.restore()
 
-        ctx.drawImage(treeImage, tree.x, tree.y, tree.width, tree.height)
+        ctx.drawImage(treeImage, tree.x, roundedY, tree.width, tree.height)
     }
+}
 
-    for (const obstacle of obstacles) {
-        ctx.save()
-        ctx.filter = 'blur(4px)'
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.beginPath()
-        ctx.ellipse(
-            obstacle.x + obstacle.width / 2,
-            obstacle.y + obstacle.height - 4,
-            obstacle.width / 2.4,
-            16,
-            0,
-            0,
-            Math.PI * 2
-        )
-        ctx.fill()
-        ctx.restore()
+function draw() {
+    ctx.fillStyle = 'black'
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
 
-        ctx.drawImage(
-            obstacleImage,
-            obstacle.x,
-            obstacle.y,
-            obstacle.width,
-            obstacle.height
-        )
-    }
-
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-    ctx.beginPath()
-    ctx.ellipse(
-        player.x + player.width / 2,
-        player.y + player.height - 16,
-        player.width / 2.4,
-        24,
-        0,
-        0,
-        Math.PI * 2
-    )
-    ctx.fill()
-    ctx.restore()
-
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = 'rgba(255, 115, 0, 0.2)'
-    ctx.beginPath()
-    ctx.ellipse(
-        player.x + player.width / 2,
-        player.y + player.height,
-        player.width / 3.6,
-        32,
-        0,
-        0,
-        Math.PI * 2
-    )
-    ctx.fill()
-    ctx.restore()
-
-    for (let i = 0; i < ghostTrail.length; i++) {
-        const ghost = ghostTrail[i]
-        const alpha = ((i + 1) / (ghostTrail.length + 1)) * 0.7
-
-        ctx.save()
-        ctx.globalAlpha = alpha
-        ctx.filter = 'blur(2px) saturate(60%)'
-        ctx.drawImage(
-            playerImage,
-            ghost.x,
-            ghost.y,
-            player.width,
-            player.height
-        )
-        ctx.restore()
-    }
-
-    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height)
+    drawSegments()
+    drawTrees()
+    drawObstacles()
+    drawPlayer()
 
     if (isGameOver) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-        ctx.fillStyle = 'white'
-        ctx.textAlign = 'center'
-
-        if (newHighScoreAchieved) {
-            ctx.font = '24px Arial'
-            ctx.fillText(
-                'NEW HIGHSCORE!',
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2 + 128
-            )
-        } else {
-            ctx.font = '28px Arial'
-            ctx.fillText(
-                'Highscore: ' + highScore,
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2 + 128
-            )
-        }
-
-        ctx.font = 'bold 48px Arial'
-        ctx.textAlign = 'center'
-        ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 32)
-
-        ctx.font = '32px Arial'
-        ctx.fillText(
-            'Final Score: ' + score,
-            GAME_WIDTH / 2,
-            GAME_HEIGHT / 2 + 20
-        )
-        ctx.fillText('Press R to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
+        drawGameOver()
     }
 }
 
