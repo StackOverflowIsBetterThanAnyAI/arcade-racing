@@ -69,7 +69,7 @@ let shouldDrawDash = true
 let obstacles = []
 const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
-const INITIAL_OBSTACLE_SPAWN_INTERVAL = 48
+const INITIAL_OBSTACLE_SPAWN_INTERVAL = 32
 let obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
 const MIN_OBSTACLE_SPAWN_RATE = 8
 let segmentsSinceLastObstacle = 0
@@ -744,8 +744,8 @@ function draw() {
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
 
     drawSegments()
-    drawTrees()
     drawRipples()
+    drawTrees()
     drawObstacles()
     drawPlayer()
 
