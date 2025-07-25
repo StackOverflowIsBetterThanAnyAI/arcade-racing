@@ -314,7 +314,7 @@ function update() {
         const roadRight =
             currentPlayerRoadSegment.x + currentPlayerRoadSegment.width
 
-        if (playerLeft < roadLeft || playerRight > roadRight) {
+        if (playerLeft < roadLeft - 8 || playerRight > roadRight + 8) {
             isGameOver = true
 
             if (score > highScore) {
