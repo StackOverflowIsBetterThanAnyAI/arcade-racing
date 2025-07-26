@@ -195,9 +195,9 @@ function createInitialRoadSegments() {
     return segments
 }
 
-function enemyCollision(enemy) {
-    while (enemy.speedY < road.speed - 0.5) {
-        enemy.speedY += 0.5
+function enemyCollision(enemy, crasher = false) {
+    while (enemy.speedY < road.speed - (crasher ? 0.25 : 0.5)) {
+        enemy.speedY += crasher ? 0.25 : 0.5
     }
     enemy.speedY = road.speed
     enemy.waveAmplitude = 0
@@ -561,6 +561,16 @@ function update() {
         if (checkCollision(player, enemies[i])) {
             isGameOver = true
             checkNewHighScore()
+        }
+
+        for (let j = i + 1; j < enemies.length; j++) {
+            const enemy1 = enemies[i]
+            const enemy2 = enemies[j]
+
+            if (checkCollision(enemy1, enemy2)) {
+                enemyCollision(enemy1, (crasher = false))
+                enemyCollision(enemy2, crasher)
+            }
         }
     }
 
