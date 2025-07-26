@@ -243,8 +243,8 @@ function generateEnemyCar(roadSegment) {
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         speedY: road.speed - 0.75 - Math.random(),
-        waveAmplitude: Math.random() * 8 + 16,
-        waveFrequency: Math.random() * 0.04 + 0.02,
+        waveAmplitude: Math.random() * 16 + 8,
+        waveFrequency: Math.random() * 0.03 + 0.03,
         time: Math.random() * 1000,
     }
 }
