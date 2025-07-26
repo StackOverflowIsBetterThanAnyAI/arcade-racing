@@ -71,7 +71,7 @@ const MIN_ROAD_WIDTH = 288
 let shouldDrawDash = true
 
 let obstacles = []
-const OBSTACLE_MIN_WIDTH = 24
+const OBSTACLE_MIN_WIDTH = 32
 const OBSTACLE_MAX_WIDTH = 48
 const INITIAL_OBSTACLE_SPAWN_INTERVAL = 32
 let obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
