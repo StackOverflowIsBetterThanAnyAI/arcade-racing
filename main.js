@@ -16,8 +16,11 @@ obstacleImage.src = 'banana.png'
 const treeImage = new Image()
 treeImage.src = 'tree.png'
 
+const enemyImage = new Image()
+enemyImage.src = 'enemy.png'
+
 let imagesLoaded = 0
-const totalImages = 3
+const totalImages = 4
 
 function onImageLoad() {
     imagesLoaded++
@@ -29,6 +32,7 @@ function onImageLoad() {
 playerImage.onload = onImageLoad
 obstacleImage.onload = onImageLoad
 treeImage.onload = onImageLoad
+enemyImage.onload = onImageLoad
 
 const INITIAL_PLAYER_STATE = {
     width: 48,
@@ -63,7 +67,7 @@ const pressedKeys = {}
 let initialSegmentsCount
 let roadSegments = []
 const MAX_ROAD_WIDTH = 448
-const MIN_ROAD_WIDTH = 256
+const MIN_ROAD_WIDTH = 288
 let shouldDrawDash = true
 
 let obstacles = []
@@ -71,8 +75,16 @@ const OBSTACLE_MIN_WIDTH = 24
 const OBSTACLE_MAX_WIDTH = 48
 const INITIAL_OBSTACLE_SPAWN_INTERVAL = 32
 let obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
-const MIN_OBSTACLE_SPAWN_RATE = 8
+const MIN_OBSTACLE_SPAWN_INTERVAL = 8
 let segmentsSinceLastObstacle = 0
+
+let enemies = []
+const ENEMY_WIDTH = 48
+const ENEMY_HEIGHT = 64
+const INITIAL_ENEMY_SPAWN_INTERVAL = 64
+let enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
+const MIN_ENEMY_SPAWN_INTERVAL = 32
+let segmentsSinceLastEnemy = 0
 
 const COLLISION_TOLERANCE = 4
 
@@ -126,6 +138,9 @@ function resetGame() {
     shouldDrawDash = true
     ripples = []
     segmentsSinceLastRipple = 0
+    enemies = []
+    enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
+    segmentsSinceLastEnemy = 0
 
     gameLoop()
 }
@@ -180,6 +195,12 @@ function createInitialRoadSegments() {
     return segments
 }
 
+function enemyCollision(enemy) {
+    enemy.speed = road.speed
+    enemy.waveAmplitude = 0
+    enemy.waveFrequency = 0
+}
+
 function getRandomGreyColor(alpha) {
     const grey = Math.floor(Math.random() * 100) + 20
     return `rgba(${grey}, ${grey}, ${grey}, ${alpha.toFixed(2)})`
@@ -203,6 +224,25 @@ function getRandomShoulderColor(alpha) {
         Math.max(0, randomColor.b + Math.floor(Math.random() * 40) - 20)
     )
     return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`
+}
+
+function generateEnemyCar(roadSegment) {
+    const safeMargin = 16
+    const availableWidth = roadSegment.width - ENEMY_WIDTH - safeMargin * 2
+
+    const baseX = roadSegment.x + safeMargin + Math.random() * availableWidth
+
+    return {
+        baseX: baseX,
+        x: baseX,
+        y: -ENEMY_HEIGHT - Math.random() * 192,
+        width: ENEMY_WIDTH,
+        height: ENEMY_HEIGHT,
+        speedY: road.speed - 0.5 - Math.random(),
+        waveAmplitude: Math.random() * 8 + 16,
+        waveFrequency: Math.random() * 0.04 + 0.02,
+        time: Math.random() * 1000,
+    }
 }
 
 function generateRipple(roadSegment) {
@@ -430,6 +470,14 @@ function update() {
                 )
                 segmentsSinceLastObstacle = 0
             }
+
+            segmentsSinceLastEnemy++
+            if (segmentsSinceLastEnemy >= INITIAL_ENEMY_SPAWN_INTERVAL) {
+                enemies.push(
+                    generateEnemyCar(roadSegments[roadSegments.length - 1])
+                )
+                segmentsSinceLastEnemy = 0
+            }
         }
 
         segmentsSinceLastTree++
@@ -452,8 +500,11 @@ function update() {
         if (road.speed < MAX_ROAD_SPEED) {
             road.speed = parseFloat((road.speed + 0.5).toFixed(1))
         }
-        if (obstacle_spawn_interval > MIN_OBSTACLE_SPAWN_RATE) {
+        if (obstacle_spawn_interval > MIN_OBSTACLE_SPAWN_INTERVAL) {
             obstacle_spawn_interval -= 4
+        }
+        if (enemy_spawn_interval > MIN_ENEMY_SPAWN_INTERVAL) {
+            enemy_spawn_interval -= 2
         }
         speedIncreasedForThisMilestone = true
     } else if (score % 100 !== 0) {
@@ -467,11 +518,95 @@ function update() {
         }
     }
 
+    for (let enemy of enemies) {
+        enemy.y += enemy.speedY
+        enemy.time += 1
+
+        const offset =
+            Math.sin(enemy.time * enemy.waveFrequency) * enemy.waveAmplitude
+        enemy.x = enemy.baseX + offset
+
+        const segment = roadSegments.find(
+            (seg) =>
+                enemy.y + enemy.height > seg.y &&
+                enemy.y < seg.y + road.segmentHeight
+        )
+
+        if (segment) {
+            const roadLeft = segment.x
+            const roadRight = segment.x + segment.width
+
+            const padding = 8
+
+            if (enemy.x < roadLeft + padding) {
+                enemy.x = roadLeft + padding
+                enemy.baseX = enemy.x
+            } else if (enemy.x + enemy.width > roadRight - padding) {
+                enemy.x = roadRight - enemy.width - padding
+                enemy.baseX = enemy.x
+            }
+        }
+
+        for (let i = 0; i < obstacles.length; i++) {
+            if (checkCollision(enemy, obstacles[i])) {
+                enemyCollision(enemy)
+            }
+        }
+    }
+
+    for (let i = 0; i < enemies.length; i++) {
+        if (checkCollision(player, enemies[i])) {
+            isGameOver = true
+            checkNewHighScore()
+        }
+    }
+
+    enemies = enemies.filter((enemy) => enemy.y < GAME_HEIGHT)
     trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
     updateGhostTrail()
+}
+
+function drawEnemies() {
+    for (const enemy of enemies) {
+        const roundedY = Math.round(enemy.y)
+        const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
+
+        ctx.save()
+        ctx.filter = 'blur(4px)'
+        ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
+        ctx.beginPath()
+        ctx.ellipse(
+            enemy.x + enemy.width / 2,
+            roundedY + enemy.height - 12,
+            enemy.width / 3.2,
+            24,
+            0,
+            0,
+            Math.PI * 2
+        )
+        ctx.fill()
+        ctx.restore()
+
+        ctx.save()
+        ctx.filter = 'blur(4px)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+        ctx.beginPath()
+        ctx.ellipse(
+            enemy.x + enemy.width / 2,
+            roundedY + enemy.height - 8,
+            enemy.width / 2.4,
+            16,
+            0,
+            0,
+            Math.PI * 2
+        )
+        ctx.fill()
+        ctx.restore()
+        ctx.drawImage(enemyImage, enemy.x, roundedY, enemy.width, enemy.height)
+    }
 }
 
 function drawGameOver() {
@@ -748,6 +883,7 @@ function draw() {
     drawTrees()
     drawObstacles()
     drawPlayer()
+    drawEnemies()
 
     if (isGameOver) {
         drawGameOver()
