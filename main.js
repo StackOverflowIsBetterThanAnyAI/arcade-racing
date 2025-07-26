@@ -195,14 +195,12 @@ function createInitialRoadSegments() {
     return segments
 }
 
-function enemyCollision(enemy, crasher = false) {
-    while (enemy.speedY < road.speed - (crasher ? 0.25 : 0.5)) {
-        enemy.speedY += crasher ? 0.25 : 0.5
-    }
+function enemyCollision(enemy) {
     enemy.speedY = road.speed
     enemy.waveAmplitude = 0
     enemy.waveFrequency = 0
     enemy.baseX = enemy.x
+    enemy.targetX = enemy.x
 }
 
 function getRandomGreyColor(alpha) {
@@ -243,9 +241,10 @@ function generateEnemyCar(roadSegment) {
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         speedY: road.speed - 0.75 - Math.random(),
+        targetX: baseX,
+        time: Math.random() * 1000,
         waveAmplitude: Math.random() * 16 + 8,
         waveFrequency: Math.random() * 0.03 + 0.03,
-        time: Math.random() * 1000,
     }
 }
 
@@ -528,7 +527,7 @@ function update() {
 
         const offset =
             Math.sin(enemy.time * enemy.waveFrequency) * enemy.waveAmplitude
-        enemy.x = enemy.baseX + offset
+        enemy.x += (enemy.targetX + offset - enemy.x) * 0.1
 
         const segment = roadSegments.find(
             (seg) =>
@@ -539,15 +538,18 @@ function update() {
         if (segment) {
             const roadLeft = segment.x
             const roadRight = segment.x + segment.width
-
-            const padding = 8
+            const padding = 32
 
             if (enemy.x < roadLeft + padding) {
-                enemy.x = roadLeft + padding
-                enemy.baseX = enemy.x
+                enemy.targetX = roadLeft + padding
+                enemy.baseX = roadLeft + padding
+                enemy.waveAmplitude *= 0.95
             } else if (enemy.x + enemy.width > roadRight - padding) {
-                enemy.x = roadRight - enemy.width - padding
-                enemy.baseX = enemy.x
+                enemy.targetX = roadRight - enemy.width - padding
+                enemy.baseX = roadRight - enemy.width - padding
+                enemy.waveAmplitude *= 0.95
+            } else {
+                enemy.targetX = enemy.baseX
             }
         }
 
@@ -569,8 +571,8 @@ function update() {
             const enemy2 = enemies[j]
 
             if (checkCollision(enemy1, enemy2)) {
-                enemyCollision(enemy1, (crasher = false))
-                enemyCollision(enemy2, crasher)
+                enemyCollision(enemy1)
+                enemyCollision(enemy2)
             }
         }
     }
