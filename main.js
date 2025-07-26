@@ -117,6 +117,16 @@ let isGameOver = false
 let gameStarted = false
 let speedIncreasedForThisMilestone = false
 
+const RAIN_COLOR = 'rgba(156, 214, 233, 0.6)'
+const RAIN_COUNT = 192
+const RAIN_SPEED_MIN = 8
+const RAIN_SPEED_MAX = 16
+const RAIN_LENGTH_MIN = 16
+const RAIN_LENGTH_MAX = 32
+const RAIN_ANGLE = Math.PI / 16
+
+let rainDrops = []
+
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
     road = { ...INITIAL_ROAD_STATE }
@@ -141,6 +151,10 @@ function resetGame() {
     enemies = []
     enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
     segmentsSinceLastEnemy = 0
+    rainDrops = []
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        rainDrops.push(generateRaindrop())
+    }
 
     gameLoop()
 }
@@ -245,6 +259,24 @@ function generateEnemyCar(roadSegment) {
         time: Math.random() * 1000,
         waveAmplitude: Math.random() * 16 + 8,
         waveFrequency: Math.random() * 0.03 + 0.03,
+    }
+}
+
+function generateRaindrop() {
+    const speed =
+        Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) + RAIN_SPEED_MIN
+    const length =
+        Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) + RAIN_LENGTH_MIN
+
+    const extendedWidth = GAME_WIDTH * 1.4
+    const startX =
+        Math.random() * extendedWidth - (extendedWidth - GAME_WIDTH) / 2
+
+    return {
+        x: startX,
+        y: 0,
+        speed: speed,
+        length: length,
     }
 }
 
@@ -582,6 +614,27 @@ function update() {
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
+    for (let i = 0; i < rainDrops.length; i++) {
+        const drop = rainDrops[i]
+
+        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
+        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+
+        if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
+            const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
+            drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
+
+            drop.y = Math.random() * GAME_HEIGHT * 0.2 - GAME_HEIGHT * 0.4
+
+            drop.speed =
+                Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) +
+                RAIN_SPEED_MIN
+            drop.length =
+                Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
+                RAIN_LENGTH_MIN
+        }
+    }
+
     updateGhostTrail()
 }
 
@@ -744,6 +797,21 @@ function drawPlayer() {
     )
 }
 
+function drawRain() {
+    ctx.strokeStyle = RAIN_COLOR
+    ctx.lineWidth = Math.ceil(Math.random() * 3) + 1
+
+    for (const drop of rainDrops) {
+        ctx.beginPath()
+        ctx.moveTo(drop.x, drop.y)
+        ctx.lineTo(
+            drop.x - Math.sin(RAIN_ANGLE) * drop.length,
+            drop.y - Math.cos(RAIN_ANGLE) * drop.length
+        )
+        ctx.stroke()
+    }
+}
+
 function drawStartScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
@@ -900,6 +968,7 @@ function draw() {
     drawObstacles()
     drawPlayer()
     drawEnemies()
+    drawRain()
 
     if (isGameOver) {
         drawGameOver()
