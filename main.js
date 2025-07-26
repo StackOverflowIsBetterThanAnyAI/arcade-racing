@@ -196,7 +196,10 @@ function createInitialRoadSegments() {
 }
 
 function enemyCollision(enemy) {
-    enemy.speed = road.speed
+    while (enemy.speedY < road.speed - 0.5) {
+        enemy.speedY += 0.5
+    }
+    enemy.speedY = road.speed
     enemy.waveAmplitude = 0
     enemy.waveFrequency = 0
 }
