@@ -81,7 +81,7 @@ let segmentsSinceLastObstacle = 0
 let enemies = []
 const ENEMY_WIDTH = 48
 const ENEMY_HEIGHT = 64
-const INITIAL_ENEMY_SPAWN_INTERVAL = 64
+const INITIAL_ENEMY_SPAWN_INTERVAL = 48
 let enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
 const MIN_ENEMY_SPAWN_INTERVAL = 32
 let segmentsSinceLastEnemy = 0
@@ -202,6 +202,7 @@ function enemyCollision(enemy, crasher = false) {
     enemy.speedY = road.speed
     enemy.waveAmplitude = 0
     enemy.waveFrequency = 0
+    enemy.baseX = enemy.x
 }
 
 function getRandomGreyColor(alpha) {
@@ -241,7 +242,7 @@ function generateEnemyCar(roadSegment) {
         y: -ENEMY_HEIGHT - Math.random() * 192,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
-        speedY: road.speed - 0.5 - Math.random(),
+        speedY: road.speed - 0.75 - Math.random(),
         waveAmplitude: Math.random() * 8 + 16,
         waveFrequency: Math.random() * 0.04 + 0.02,
         time: Math.random() * 1000,
