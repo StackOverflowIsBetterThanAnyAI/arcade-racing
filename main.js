@@ -86,7 +86,7 @@ let enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
 const MIN_ENEMY_SPAWN_INTERVAL = 32
 let segmentsSinceLastEnemy = 0
 
-const COLLISION_TOLERANCE = 4
+const COLLISION_TOLERANCE = 6
 
 const TREE_SPAWN_INTERVAL = 8
 let segmentsSinceLastTree = 0
@@ -223,11 +223,13 @@ function createInitialRoadSegments() {
 }
 
 function enemyCollision(enemy) {
-    enemy.speedY = road.speed
-    enemy.waveAmplitude = 0
-    enemy.waveFrequency = 0
-    enemy.baseX = enemy.x
-    enemy.targetX = enemy.x
+    if (!enemy.isCrashing) {
+        enemy.isCrashing = true
+        enemy.waveAmplitude = 0
+        enemy.waveFrequency = 0
+        enemy.targetX = enemy.x
+        enemy.baseX = enemy.x
+    }
 }
 
 function getRandomGreyColor(alpha) {
@@ -271,7 +273,8 @@ function generateEnemyCar(roadSegment) {
         targetX: baseX,
         time: Math.random() * 1000,
         waveAmplitude: Math.random() * 16 + 8 + 4 * isRaining,
-        waveFrequency: Math.random() * 0.03 + 0.03 + 0.005 * isRaining,
+        waveFrequency: Math.random() * 0.03 + 0.02 + 0.005 * isRaining,
+        isCrashing: false,
     }
 }
 
@@ -611,6 +614,14 @@ function update() {
     }
 
     for (let enemy of enemies) {
+        if (enemy.isCrashing) {
+            if (enemy.speedY < road.speed) {
+                enemy.speedY *= 1.05
+            } else {
+                enemy.speedY = road.speed
+            }
+        }
+
         enemy.y += enemy.speedY
         enemy.time += 1
 
@@ -629,16 +640,18 @@ function update() {
             const roadRight = segment.x + segment.width
             const padding = 32
 
-            if (enemy.x < roadLeft + padding) {
-                enemy.targetX = roadLeft + padding
-                enemy.baseX = roadLeft + padding
-                enemy.waveAmplitude *= 0.95
-            } else if (enemy.x + enemy.width > roadRight - padding) {
-                enemy.targetX = roadRight - enemy.width - padding
-                enemy.baseX = roadRight - enemy.width - padding
-                enemy.waveAmplitude *= 0.95
-            } else {
-                enemy.targetX = enemy.baseX
+            if (!enemy.isCrashing) {
+                if (enemy.x < roadLeft + padding) {
+                    enemy.targetX = roadLeft + padding
+                    enemy.baseX = roadLeft + padding
+                    enemy.waveAmplitude *= 0.95
+                } else if (enemy.x + enemy.width > roadRight - padding) {
+                    enemy.targetX = roadRight - enemy.width - padding
+                    enemy.baseX = roadRight - enemy.width - padding
+                    enemy.waveAmplitude *= 0.95
+                } else {
+                    enemy.targetX = enemy.baseX
+                }
             }
         }
 
