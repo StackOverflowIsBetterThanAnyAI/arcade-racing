@@ -137,6 +137,13 @@ let rainFilterOpacity = 0
 const RAIN_FILTER_FADE_SPEED = 0.005
 const RAIN_FILTER_MAX_OPACITY = 0.4
 
+let smokeParticles = []
+const SMOKE_COLOR = 'rgba(100, 100, 100, 0.4)'
+const SMOKE_FADE_SPEED = 0.008
+const SMOKE_GROW_SPEED = 0.4
+const SMOKE_MIN_SIZE = 4
+const SMOKE_MAX_SIZE = 12
+
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
     road = { ...INITIAL_ROAD_STATE }
@@ -170,6 +177,7 @@ function resetGame() {
     clearTimeout(rainToggleInterval)
     rainToggleInterval = null
     toggleRainRandomly()
+    smokeParticles = []
 
     gameLoop()
 }
@@ -224,6 +232,18 @@ function createInitialRoadSegments() {
     return segments
 }
 
+function drawSmokeParticles() {
+    for (const particle of smokeParticles) {
+        ctx.save()
+        ctx.globalAlpha = particle.alpha
+        ctx.fillStyle = SMOKE_COLOR
+        ctx.beginPath()
+        ctx.arc(particle.x, particle.y, particle.size / 2, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+    }
+}
+
 function enemyCollision(enemy, obj) {
     if (!enemy.isCrashing) {
         enemy.isCrashing = true
@@ -236,6 +256,21 @@ function enemyCollision(enemy, obj) {
         } else {
             enemy.rotationDirection = 1
         }
+        enemy.isSmoking = true
+    }
+}
+
+function generateSmokeParticle(x, y) {
+    const size =
+        Math.random() * (SMOKE_MAX_SIZE - SMOKE_MIN_SIZE) + SMOKE_MIN_SIZE
+    return {
+        x: x + (Math.random() - 0.5) * 8,
+        y: y + (Math.random() - 0.5) * 8,
+        size: size,
+        alpha: 1,
+        speedX: (Math.random() - 0.5) * 0.3,
+        speedY: (Math.random() - 1.2) * 0.3 - 0.5,
+        initialSize: size,
     }
 }
 
@@ -510,6 +545,87 @@ function updateGhostTrail() {
     }
 }
 
+function updateRain() {
+    if (isTransitioningRain) {
+        if (isRaining && currentRainCount < rainTargetCount) {
+            const dropsToAdd = Math.ceil(
+                (rainTargetCount - currentRainCount) / 10
+            )
+            for (let i = 0; i < dropsToAdd; i++) {
+                rainDrops.push(generateRaindrop())
+            }
+            currentRainCount = rainDrops.length
+            if (currentRainCount >= rainTargetCount) {
+                isTransitioningRain = false
+            }
+        } else if (!isRaining && currentRainCount > rainTargetCount) {
+            currentRainCount = rainDrops.length
+            if (currentRainCount <= rainTargetCount) {
+                isTransitioningRain = false
+                rainDrops = []
+            }
+        } else if (
+            (isRaining && currentRainCount === rainTargetCount) ||
+            (!isRaining && currentRainCount === rainTargetCount)
+        ) {
+            isTransitioningRain = false
+        }
+    }
+
+    for (let i = 0; i < rainDrops.length; i++) {
+        const drop = rainDrops[i]
+
+        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
+        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+
+        if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
+            if (
+                isRaining ||
+                (isTransitioningRain && currentRainCount < rainTargetCount)
+            ) {
+                const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
+                drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
+
+                drop.y = Math.random() * GAME_HEIGHT * 0.2 - GAME_HEIGHT * 0.4
+
+                drop.speed =
+                    Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) +
+                    RAIN_SPEED_MIN
+                drop.length =
+                    Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
+                    RAIN_LENGTH_MIN
+            } else {
+                rainDrops.splice(i, 1)
+                i--
+            }
+        }
+    }
+    currentRainCount = rainDrops.length
+}
+
+function updateSmoke() {
+    for (let i = 0; i < smokeParticles.length; i++) {
+        const particle = smokeParticles[i]
+
+        particle.x += particle.speedX
+        particle.y += particle.speedY + road.speed
+
+        particle.alpha = Math.max(0, particle.alpha - SMOKE_FADE_SPEED)
+        particle.size += SMOKE_GROW_SPEED
+
+        if (
+            particle.alpha <= 0 ||
+            particle.x + particle.size < 0 ||
+            particle.x > GAME_WIDTH ||
+            particle.y + particle.size < 0 ||
+            particle.y > GAME_HEIGHT
+        ) {
+            smokeParticles.splice(i, 1)
+            i--
+        }
+    }
+}
+
 function update() {
     if (isGameOver) {
         return
@@ -700,6 +816,17 @@ function update() {
                 enemyCollision(enemy, obstacles[i])
             }
         }
+
+        if (enemy.isCrashing && enemy.isSmoking) {
+            for (let i = 0; i < 2; i++) {
+                smokeParticles.push(
+                    generateSmokeParticle(
+                        enemy.x + enemy.width / 2,
+                        enemy.y + enemy.height
+                    )
+                )
+            }
+        }
     }
 
     for (let i = 0; i < enemies.length; i++) {
@@ -724,63 +851,9 @@ function update() {
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
-    if (isTransitioningRain) {
-        if (isRaining && currentRainCount < rainTargetCount) {
-            const dropsToAdd = Math.ceil(
-                (rainTargetCount - currentRainCount) / 10
-            )
-            for (let i = 0; i < dropsToAdd; i++) {
-                rainDrops.push(generateRaindrop())
-            }
-            currentRainCount = rainDrops.length
-            if (currentRainCount >= rainTargetCount) {
-                isTransitioningRain = false
-            }
-        } else if (!isRaining && currentRainCount > rainTargetCount) {
-            currentRainCount = rainDrops.length
-            if (currentRainCount <= rainTargetCount) {
-                isTransitioningRain = false
-                rainDrops = []
-            }
-        } else if (
-            (isRaining && currentRainCount === rainTargetCount) ||
-            (!isRaining && currentRainCount === rainTargetCount)
-        ) {
-            isTransitioningRain = false
-        }
-    }
-
-    for (let i = 0; i < rainDrops.length; i++) {
-        const drop = rainDrops[i]
-
-        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
-        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
-
-        if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
-            if (
-                isRaining ||
-                (isTransitioningRain && currentRainCount < rainTargetCount)
-            ) {
-                const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
-                drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
-
-                drop.y = Math.random() * GAME_HEIGHT * 0.2 - GAME_HEIGHT * 0.4
-
-                drop.speed =
-                    Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) +
-                    RAIN_SPEED_MIN
-                drop.length =
-                    Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
-                    RAIN_LENGTH_MIN
-            } else {
-                rainDrops.splice(i, 1)
-                i--
-            }
-        }
-    }
-    currentRainCount = rainDrops.length
-
+    updateRain()
     updateGhostTrail()
+    updateSmoke()
 }
 
 function drawEnemies() {
@@ -1136,6 +1209,7 @@ function draw() {
     drawObstacles()
     drawPlayer()
     drawEnemies()
+    drawSmokeParticles()
     drawRain()
     drawRainFilter()
 
