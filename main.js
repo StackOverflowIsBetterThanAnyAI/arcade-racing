@@ -86,6 +86,8 @@ let enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
 const MIN_ENEMY_SPAWN_INTERVAL = 32
 let segmentsSinceLastEnemy = 0
 
+const PLAYER_DETECTION_RADIUS = 128
+
 const COLLISION_TOLERANCE = 6
 
 const TREE_SPAWN_INTERVAL = 8
@@ -265,23 +267,25 @@ function getRandomShoulderColor(alpha) {
 function generateEnemyCar(roadSegment) {
     const safeMargin = 16
     const availableWidth = roadSegment.width - ENEMY_WIDTH - safeMargin * 2
-
-    const baseX = roadSegment.x + safeMargin + Math.random() * availableWidth
+    const random = Math.random()
+    const baseX = roadSegment.x + safeMargin + random * availableWidth
 
     return {
         baseX: baseX,
         x: baseX,
-        y: -ENEMY_HEIGHT - Math.random() * 192,
+        y: -ENEMY_HEIGHT - random * 192,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         isCrashing: false,
         rotation: 0,
         rotationDirection: 0,
-        speedY: road.speed - 0.75 - Math.random() + 0.125 * isRaining,
+        speedY: road.speed - 0.75 - random + 0.125 * isRaining,
         targetX: baseX,
-        time: Math.random() * 1000,
-        waveAmplitude: Math.random() * 16 + 8 + 4 * isRaining,
-        waveFrequency: Math.random() * 0.03 + 0.02 + 0.005 * isRaining,
+        time: random * 1000,
+        waveAmplitude: random * 16 + 8 + 4 * isRaining,
+        waveFrequency: random * 0.03 + 0.02 + 0.005 * isRaining,
+        originalWaveAmplitude: random * 16 + 8 + 4 * isRaining,
+        originalWaveFrequency: random * 0.03 + 0.02 + 0.005 * isRaining,
     }
 }
 
@@ -644,6 +648,20 @@ function update() {
 
         enemy.y += enemy.speedY
         enemy.time += 1
+
+        const dx = player.x + player.width / 2 - (enemy.x + enemy.width / 2)
+        const dy = player.y + player.height / 2 - (enemy.y + enemy.height / 2)
+        const distance = Math.sqrt(dx * dx + dy * dy)
+
+        if (!enemy.isCrashing) {
+            if (distance < PLAYER_DETECTION_RADIUS) {
+                enemy.waveAmplitude = enemy.originalWaveAmplitude * 1.4
+                enemy.waveFrequency = enemy.originalWaveFrequency * 1.2
+            } else {
+                enemy.waveAmplitude = enemy.originalWaveAmplitude
+                enemy.waveFrequency = enemy.originalWaveFrequency
+            }
+        }
 
         const offset =
             Math.sin(enemy.time * enemy.waveFrequency) * enemy.waveAmplitude
