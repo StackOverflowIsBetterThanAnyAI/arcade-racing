@@ -665,10 +665,12 @@ function update() {
                     enemy.targetX = roadLeft + padding
                     enemy.baseX = roadLeft + padding
                     enemy.waveAmplitude *= 0.95
+                    enemy.y -= 0.5
                 } else if (enemy.x + enemy.width > roadRight - padding) {
                     enemy.targetX = roadRight - enemy.width - padding
                     enemy.baseX = roadRight - enemy.width - padding
                     enemy.waveAmplitude *= 0.95
+                    enemy.y -= 0.5
                 } else {
                     enemy.targetX = enemy.baseX
                 }
