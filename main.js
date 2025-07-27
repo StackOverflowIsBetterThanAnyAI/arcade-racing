@@ -8,16 +8,16 @@ canvas.width = GAME_WIDTH
 canvas.height = GAME_HEIGHT
 
 const playerImage = new Image()
-playerImage.src = 'player.png'
+playerImage.src = './player.png'
 
 const obstacleImage = new Image()
-obstacleImage.src = 'banana.png'
+obstacleImage.src = './banana.png'
 
 const treeImage = new Image()
-treeImage.src = 'tree.png'
+treeImage.src = './tree.png'
 
 const enemyImage = new Image()
-enemyImage.src = 'enemy.png'
+enemyImage.src = './enemy.png'
 
 let imagesLoaded = 0
 const totalImages = 4
