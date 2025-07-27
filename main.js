@@ -126,6 +126,8 @@ const RAIN_LENGTH_MAX = 32
 const RAIN_ANGLE = Math.PI / 16
 
 let rainDrops = []
+let isRaining = true
+let rainToggleInterval = null
 
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
@@ -152,16 +154,17 @@ function resetGame() {
     enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
     segmentsSinceLastEnemy = 0
     rainDrops = []
-    for (let i = 0; i < RAIN_COUNT; i++) {
-        rainDrops.push(generateRaindrop())
-    }
+    isRaining = true
+    clearTimeout(rainToggleInterval)
+    rainToggleInterval = null
+    toggleRainRandomly()
 
     gameLoop()
 }
 
 document.addEventListener('keydown', (e) => {
     pressedKeys[e.key] = true
-    if ((isGameOver && e.key === 'r') || e.key === 'R') {
+    if (isGameOver && (e.key === 'r' || e.key === 'R')) {
         resetGame()
     }
     if (!gameStarted && e.key === ' ') {
@@ -421,6 +424,37 @@ function generateTree() {
     }
 }
 
+function startRain() {
+    if (!isRaining) {
+        isRaining = true
+        rainDrops = []
+        for (let i = 0; i < RAIN_COUNT; i++) {
+            rainDrops.push(generateRaindrop())
+        }
+        player.speed = 3
+    }
+}
+
+function stopRain() {
+    if (isRaining) {
+        isRaining = false
+        rainDrops = []
+        player.speed = 2
+    }
+}
+
+function toggleRainRandomly() {
+    const nextToggleTime = (Math.random() * 24 + 8) * 1000
+
+    if (isRaining) {
+        stopRain()
+    } else {
+        startRain()
+    }
+
+    rainToggleInterval = setTimeout(toggleRainRandomly, nextToggleTime)
+}
+
 function updateGhostTrail() {
     let currentPlayerRoadSegment = null
     for (const segment of roadSegments) {
@@ -614,24 +648,26 @@ function update() {
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
-    for (let i = 0; i < rainDrops.length; i++) {
-        const drop = rainDrops[i]
+    if (isRaining) {
+        for (let i = 0; i < rainDrops.length; i++) {
+            const drop = rainDrops[i]
 
-        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
-        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+            drop.x += Math.sin(RAIN_ANGLE) * drop.speed
+            drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
 
-        if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
-            const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
-            drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
+            if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
+                const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
+                drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
 
-            drop.y = Math.random() * GAME_HEIGHT * 0.2 - GAME_HEIGHT * 0.4
+                drop.y = Math.random() * GAME_HEIGHT * 0.2 - GAME_HEIGHT * 0.4
 
-            drop.speed =
-                Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) +
-                RAIN_SPEED_MIN
-            drop.length =
-                Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
-                RAIN_LENGTH_MIN
+                drop.speed =
+                    Math.random() * (RAIN_SPEED_MAX - RAIN_SPEED_MIN) +
+                    RAIN_SPEED_MIN
+                drop.length =
+                    Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
+                    RAIN_LENGTH_MIN
+            }
         }
     }
 
@@ -798,6 +834,8 @@ function drawPlayer() {
 }
 
 function drawRain() {
+    if (!isRaining) return
+
     ctx.strokeStyle = RAIN_COLOR
     ctx.lineWidth = Math.ceil(Math.random() * 3) + 1
 
@@ -976,14 +1014,14 @@ function draw() {
 }
 
 function gameLoop() {
-    if (isGameOver) {
+    if (isGameOver || !gameStarted) {
         draw()
-        return
-    }
+        if (!isGameOver) {
+            drawStartScreen()
+        }
 
-    if (!gameStarted) {
-        draw()
-        drawStartScreen()
+        clearTimeout(rainToggleInterval)
+        rainToggleInterval = null
         return
     }
 
