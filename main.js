@@ -131,6 +131,9 @@ let rainToggleInterval = null
 let isTransitioningRain = false
 let rainTargetCount = RAIN_COUNT
 let currentRainCount = 0
+let rainFilterOpacity = 0
+const RAIN_FILTER_FADE_SPEED = 0.005
+const RAIN_FILTER_MAX_OPACITY = 0.4
 
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
@@ -161,6 +164,7 @@ function resetGame() {
     isTransitioningRain = false
     currentRainCount = 0
     rainTargetCount = RAIN_COUNT
+    rainFilterOpacity = 0
     clearTimeout(rainToggleInterval)
     rainToggleInterval = null
     toggleRainRandomly()
@@ -497,6 +501,20 @@ function update() {
         return
     }
 
+    if (isRaining) {
+        rainFilterOpacity = Math.min(
+            rainFilterOpacity + RAIN_FILTER_FADE_SPEED,
+            RAIN_FILTER_MAX_OPACITY
+        )
+    } else {
+        if (currentRainCount === 0) {
+            rainFilterOpacity = Math.max(
+                rainFilterOpacity - RAIN_FILTER_FADE_SPEED,
+                0
+            )
+        }
+    }
+
     if (pressedKeys['ArrowLeft']) {
         player.x -= player.speed
     }
@@ -666,7 +684,6 @@ function update() {
                 isTransitioningRain = false
             }
         } else if (!isRaining && currentRainCount > rainTargetCount) {
-            const dropsToRemovePerFrame = Math.ceil(currentRainCount / 10)
             currentRainCount = rainDrops.length
             if (currentRainCount <= rainTargetCount) {
                 isTransitioningRain = false
@@ -889,6 +906,15 @@ function drawRain() {
     }
 }
 
+function drawRainFilter() {
+    if (rainFilterOpacity > 0) {
+        ctx.save()
+        ctx.fillStyle = `rgba(0, 0, 50, ${rainFilterOpacity})`
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+        ctx.restore()
+    }
+}
+
 function drawStartScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
@@ -1046,6 +1072,7 @@ function draw() {
     drawPlayer()
     drawEnemies()
     drawRain()
+    drawRainFilter()
 
     if (isGameOver) {
         drawGameOver()
@@ -1058,8 +1085,10 @@ function gameLoop() {
         if (!isGameOver) {
             drawStartScreen()
         }
-        clearTimeout(rainToggleInterval)
-        rainToggleInterval = null
+        if (!gameStarted && !isGameOver && rainFilterOpacity === 0) {
+            clearTimeout(rainToggleInterval)
+            rainToggleInterval = null
+        }
         return
     }
 
