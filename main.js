@@ -128,6 +128,9 @@ const RAIN_ANGLE = Math.PI / 16
 let rainDrops = []
 let isRaining = true
 let rainToggleInterval = null
+let isTransitioningRain = false
+let rainTargetCount = RAIN_COUNT
+let currentRainCount = 0
 
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
@@ -155,6 +158,9 @@ function resetGame() {
     segmentsSinceLastEnemy = 0
     rainDrops = []
     isRaining = true
+    isTransitioningRain = false
+    currentRainCount = 0
+    rainTargetCount = RAIN_COUNT
     clearTimeout(rainToggleInterval)
     rainToggleInterval = null
     toggleRainRandomly()
@@ -427,10 +433,8 @@ function generateTree() {
 function startRain() {
     if (!isRaining) {
         isRaining = true
-        rainDrops = []
-        for (let i = 0; i < RAIN_COUNT; i++) {
-            rainDrops.push(generateRaindrop())
-        }
+        isTransitioningRain = true
+        rainTargetCount = RAIN_COUNT
         player.speed = 3
     }
 }
@@ -438,7 +442,8 @@ function startRain() {
 function stopRain() {
     if (isRaining) {
         isRaining = false
-        rainDrops = []
+        isTransitioningRain = true
+        rainTargetCount = 0
         player.speed = 2
     }
 }
@@ -648,14 +653,44 @@ function update() {
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
-    if (isRaining) {
-        for (let i = 0; i < rainDrops.length; i++) {
-            const drop = rainDrops[i]
+    if (isTransitioningRain) {
+        if (isRaining && currentRainCount < rainTargetCount) {
+            const dropsToAdd = Math.ceil(
+                (rainTargetCount - currentRainCount) / 10
+            )
+            for (let i = 0; i < dropsToAdd; i++) {
+                rainDrops.push(generateRaindrop())
+            }
+            currentRainCount = rainDrops.length
+            if (currentRainCount >= rainTargetCount) {
+                isTransitioningRain = false
+            }
+        } else if (!isRaining && currentRainCount > rainTargetCount) {
+            const dropsToRemovePerFrame = Math.ceil(currentRainCount / 10)
+            currentRainCount = rainDrops.length
+            if (currentRainCount <= rainTargetCount) {
+                isTransitioningRain = false
+                rainDrops = []
+            }
+        } else if (
+            (isRaining && currentRainCount === rainTargetCount) ||
+            (!isRaining && currentRainCount === rainTargetCount)
+        ) {
+            isTransitioningRain = false
+        }
+    }
 
-            drop.x += Math.sin(RAIN_ANGLE) * drop.speed
-            drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+    for (let i = 0; i < rainDrops.length; i++) {
+        const drop = rainDrops[i]
 
-            if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
+        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
+        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+
+        if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
+            if (
+                isRaining ||
+                (isTransitioningRain && currentRainCount < rainTargetCount)
+            ) {
                 const spawnXRange = GAME_WIDTH + GAME_WIDTH * 0.5
                 drop.x = Math.random() * spawnXRange - GAME_WIDTH * 0.1
 
@@ -667,9 +702,13 @@ function update() {
                 drop.length =
                     Math.random() * (RAIN_LENGTH_MAX - RAIN_LENGTH_MIN) +
                     RAIN_LENGTH_MIN
+            } else {
+                rainDrops.splice(i, 1)
+                i--
             }
         }
     }
+    currentRainCount = rainDrops.length
 
     updateGhostTrail()
 }
@@ -834,7 +873,7 @@ function drawPlayer() {
 }
 
 function drawRain() {
-    if (!isRaining) return
+    if (rainDrops.length === 0 && !isTransitioningRain) return
 
     ctx.strokeStyle = RAIN_COLOR
     ctx.lineWidth = Math.ceil(Math.random() * 3) + 1
@@ -1019,7 +1058,6 @@ function gameLoop() {
         if (!isGameOver) {
             drawStartScreen()
         }
-
         clearTimeout(rainToggleInterval)
         rainToggleInterval = null
         return
