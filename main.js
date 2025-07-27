@@ -222,13 +222,18 @@ function createInitialRoadSegments() {
     return segments
 }
 
-function enemyCollision(enemy) {
+function enemyCollision(enemy, obj) {
     if (!enemy.isCrashing) {
         enemy.isCrashing = true
         enemy.waveAmplitude = 0
         enemy.waveFrequency = 0
         enemy.targetX = enemy.x
         enemy.baseX = enemy.x
+        if (enemy.x + enemy.width / 2 < obj.x + obj.width / 2) {
+            enemy.rotationDirection = -1
+        } else {
+            enemy.rotationDirection = 1
+        }
     }
 }
 
@@ -269,12 +274,14 @@ function generateEnemyCar(roadSegment) {
         y: -ENEMY_HEIGHT - Math.random() * 192,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
+        isCrashing: false,
+        rotation: 0,
+        rotationDirection: 0,
         speedY: road.speed - 0.75 - Math.random() + 0.125 * isRaining,
         targetX: baseX,
         time: Math.random() * 1000,
         waveAmplitude: Math.random() * 16 + 8 + 4 * isRaining,
         waveFrequency: Math.random() * 0.03 + 0.02 + 0.005 * isRaining,
-        isCrashing: false,
     }
 }
 
@@ -620,6 +627,19 @@ function update() {
             } else {
                 enemy.speedY = road.speed
             }
+
+            const rotationSpeed = 0.04
+            if (enemy.rotationDirection === 1) {
+                enemy.rotation = Math.min(
+                    enemy.rotation + rotationSpeed,
+                    (4 * Math.PI) / 180
+                )
+            } else if (enemy.rotationDirection === -1) {
+                enemy.rotation = Math.max(
+                    enemy.rotation - rotationSpeed,
+                    (-4 * Math.PI) / 180
+                )
+            }
         }
 
         enemy.y += enemy.speedY
@@ -657,7 +677,7 @@ function update() {
 
         for (let i = 0; i < obstacles.length; i++) {
             if (checkCollision(enemy, obstacles[i])) {
-                enemyCollision(enemy)
+                enemyCollision(enemy, obstacles[i])
             }
         }
     }
@@ -673,8 +693,8 @@ function update() {
             const enemy2 = enemies[j]
 
             if (checkCollision(enemy1, enemy2)) {
-                enemyCollision(enemy1)
-                enemyCollision(enemy2)
+                enemyCollision(enemy1, enemy2)
+                enemyCollision(enemy2, enemy1)
             }
         }
     }
@@ -779,7 +799,19 @@ function drawEnemies() {
         )
         ctx.fill()
         ctx.restore()
-        ctx.drawImage(enemyImage, enemy.x, roundedY, enemy.width, enemy.height)
+
+        ctx.save()
+        ctx.translate(enemy.x + enemy.width / 2, roundedY + enemy.height / 2)
+        ctx.rotate(enemy.rotation)
+        ctx.drawImage(
+            enemyImage,
+            -enemy.width / 2,
+            -enemy.height / 2,
+            enemy.width,
+            enemy.height
+        )
+
+        ctx.restore()
     }
 }
 
