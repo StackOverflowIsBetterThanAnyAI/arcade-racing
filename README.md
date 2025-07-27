@@ -6,4 +6,4 @@ Don't lose control on this randomly generated track: stay on course, avoid enemy
 
 What might sound easy on a regular track, could become quite challenging when it starts raining.
 
-![Arcade Racing Gameplay](https://github.com/user-attachments/assets/a2e9e933-19d8-4271-9964-816ff2eb9459)
+![Arcade Racing Gameplay](https://github.com/user-attachments/assets/50d2ee36-eb14-4b9b-a3a8-c617c6fe23ab)
