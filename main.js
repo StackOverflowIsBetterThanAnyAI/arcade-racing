@@ -1,3 +1,12 @@
+async function onAssetsLoaded() {
+    await document.fonts.load("48px 'Press Start 2P'")
+    await document.fonts.load("32px 'Press Start 2P'")
+    await document.fonts.load("28px 'Press Start 2P'")
+    await document.fonts.load("24px 'Press Start 2P'")
+
+    resetGame()
+}
+
 const canvas = document.getElementById('gameCanvas')
 const ctx = canvas.getContext('2d')
 
@@ -24,10 +33,9 @@ const totalImages = 4
 
 function onImageLoad() {
     imagesLoaded++
+
     if (imagesLoaded === totalImages) {
-        document.fonts.ready.then(() => {
-            resetGame()
-        })
+        onAssetsLoaded()
     }
 }
 
