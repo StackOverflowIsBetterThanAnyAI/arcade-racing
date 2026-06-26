@@ -184,7 +184,7 @@ function resetGame() {
 
 document.addEventListener('keydown', (e) => {
     pressedKeys[e.key] = true
-    if (isGameOver && (e.key === 'r' || e.key === 'R')) {
+    if (isGameOver && e.key === ' ') {
         resetGame()
     }
     if (!gameStarted && e.key === ' ') {
@@ -308,7 +308,7 @@ function drawGameOver() {
 
     ctx.font = '32px Arial'
     ctx.fillText('Final Score: ' + score, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20)
-    ctx.fillText('Press R to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
+    ctx.fillText('Press SPACE to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
 }
 
 function drawObstacles() {
