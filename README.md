@@ -8,4 +8,4 @@ Watch out, they won't just let you pass by.
 
 What might sound easy on a regular track, could become quite challenging when it starts raining.
 
-![Arcade Racing Gameplay](https://github.com/user-attachments/assets/72ef3a86-d4b3-4760-995e-e68ecd2ebcfd)
+![Arcade Racing Gameplay](https://github.com/user-attachments/assets/e7f46401-3e11-4344-9f1f-40bfa36c2f66)
