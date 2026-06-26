@@ -25,7 +25,9 @@ const totalImages = 4
 function onImageLoad() {
     imagesLoaded++
     if (imagesLoaded === totalImages) {
-        resetGame()
+        document.fonts.ready.then(() => {
+            resetGame()
+        })
     }
 }
 
