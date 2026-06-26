@@ -291,10 +291,10 @@ function drawGameOver() {
     ctx.textAlign = 'center'
 
     if (newHighScoreAchieved) {
-        ctx.font = '24px Arial'
-        ctx.fillText('NEW HIGHSCORE!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 128)
+        ctx.font = "40px 'Press Start 2P'"
+        ctx.fillText('NEW HIGHSCORE!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 144)
     } else {
-        ctx.font = '28px Arial'
+        ctx.font = "28px 'Press Start 2P'"
         ctx.fillText(
             'Highscore: ' + highScore,
             GAME_WIDTH / 2,
@@ -302,12 +302,12 @@ function drawGameOver() {
         )
     }
 
-    ctx.font = 'bold 48px Arial'
+    ctx.font = "bold 48px 'Press Start 2P'"
     ctx.textAlign = 'center'
-    ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 32)
+    ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 64)
 
-    ctx.font = '32px Arial'
-    ctx.fillText('Final Score: ' + score, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20)
+    ctx.font = "32px 'Press Start 2P'"
+    ctx.fillText('Final Score: ' + score, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 8)
     ctx.fillText('Press SPACE to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
 }
 
@@ -450,7 +450,7 @@ function drawRipples() {
 
 function drawScores() {
     const scoreText = 'Score: ' + score
-    ctx.font = '24px Arial'
+    ctx.font = "24px 'Press Start 2P'"
     const textWidth = ctx.measureText(scoreText).width
     const padding = 8
     const backgroundX = GAME_WIDTH - textWidth - padding * 3
@@ -469,7 +469,7 @@ function drawScores() {
 
     const highScoreText =
         score >= highScore ? 'New Highscore!' : 'Highscore: ' + highScore
-    ctx.font = '24px Arial'
+    ctx.font = "24px 'Press Start 2P'"
     ctx.textAlign = 'left'
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
     ctx.fillRect(
@@ -537,17 +537,17 @@ function drawStartScreen() {
     ctx.fillStyle = '#f1f1f1ff'
     ctx.textAlign = 'center'
 
-    ctx.font = 'bold 48px Arial'
-    ctx.fillText('Arcade Racing', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60)
+    ctx.font = "bold 48px 'Press Start 2P'"
+    ctx.fillText('Arcade Racing', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80)
 
-    ctx.font = '32px Arial'
-    ctx.fillText('Press SPACE to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20)
+    ctx.font = "32px 'Press Start 2P'"
+    ctx.fillText('Press SPACE to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2)
 
-    ctx.font = '24px Arial'
-    ctx.fillText('Use Arrow Keys to Move', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 70)
+    ctx.font = "24px 'Press Start 2P'"
+    ctx.fillText('Use Arrow Keys to Move', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50)
 
     const highScoreText = 'Current Highscore: ' + highScore
-    ctx.font = 'bold 28px Arial'
+    ctx.font = "bold 28px 'Press Start 2P'"
     ctx.fillText(highScoreText, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140)
 }
 
@@ -1199,6 +1199,15 @@ function update() {
     updateSmoke()
 }
 
+function drawScanlines() {
+    ctx.save()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
+    for (let y = 0; y < GAME_HEIGHT; y += 8) {
+        ctx.fillRect(0, y, GAME_WIDTH, 2)
+    }
+    ctx.restore()
+}
+
 function draw() {
     ctx.fillStyle = 'black'
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
@@ -1212,6 +1221,7 @@ function draw() {
     drawSmokeParticles()
     drawRain()
     drawRainFilter()
+    drawScanlines()
 
     if (isGameOver) {
         drawGameOver()
