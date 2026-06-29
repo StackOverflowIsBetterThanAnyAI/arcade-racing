@@ -28,8 +28,11 @@ treeImage.src = './tree.png'
 const enemyImage = new Image()
 enemyImage.src = './enemy.png'
 
+const safetyCarImage = new Image()
+safetyCarImage.src = './safetycar.png'
+
 let imagesLoaded = 0
-const totalImages = 4
+const totalImages = 5
 
 function onImageLoad() {
     imagesLoaded++
@@ -43,6 +46,7 @@ playerImage.onload = onImageLoad
 obstacleImage.onload = onImageLoad
 treeImage.onload = onImageLoad
 enemyImage.onload = onImageLoad
+safetyCarImage.onload = onImageLoad
 
 const INITIAL_PLAYER_STATE = {
     width: 48,
@@ -122,6 +126,8 @@ const SHOULDER_RIPPLE_COLORS = [
     { r: 120, g: 90, b: 60 },
 ]
 
+let safetyCar = null
+
 let score = 0
 let highScore = parseInt(localStorage.getItem('highScore')) || 0
 let newHighScoreAchieved = false
@@ -188,6 +194,7 @@ function resetGame() {
     rainToggleInterval = null
     toggleRainRandomly()
     smokeParticles = []
+    safetyCar = null
 
     gameLoop()
 }
@@ -240,6 +247,15 @@ function createInitialRoadSegments() {
         shouldDrawDash = !shouldDrawDash
     }
     return segments
+}
+
+function createSafetyCar() {
+    return {
+        x: GAME_WIDTH / 2 - ENEMY_WIDTH / 2,
+        y: 150,
+        width: ENEMY_WIDTH,
+        height: ENEMY_HEIGHT,
+    }
 }
 
 function drawEnemies() {
@@ -842,6 +858,10 @@ function startRain() {
         isTransitioningRain = true
         rainTargetCount = RAIN_COUNT
         player.speed = 3
+
+        if (!safetyCar) {
+            safetyCar = createSafetyCar()
+        }
     }
 }
 
@@ -851,6 +871,8 @@ function stopRain() {
         isTransitioningRain = true
         rainTargetCount = 0
         player.speed = 2
+
+        safetyCar = null
     }
 }
 
@@ -1168,6 +1190,9 @@ function update() {
             if (checkCollision(enemy, obstacles[i])) {
                 enemyCollision(enemy, obstacles[i])
             }
+            if (safetyCar && checkCollision(enemy, safetyCar)) {
+                enemyCollision(enemy, safetyCar)
+            }
         }
 
         if (enemy.isCrashing && enemy.isSmoking) {
@@ -1199,6 +1224,14 @@ function update() {
         }
     }
 
+    if (safetyCar) {
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            if (checkCollision(safetyCar, obstacles[i])) {
+                obstacles.splice(i, 1)
+            }
+        }
+    }
+
     enemies = enemies.filter((enemy) => enemy.y < GAME_HEIGHT)
     trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
@@ -1207,6 +1240,20 @@ function update() {
     updateRain()
     updateGhostTrail()
     updateSmoke()
+}
+
+function drawSafetyCar() {
+    if (!safetyCar) {
+        return
+    }
+
+    ctx.drawImage(
+        safetyCarImage,
+        safetyCar.x,
+        Math.round(safetyCar.y),
+        safetyCar.width,
+        safetyCar.height
+    )
 }
 
 function drawScanlines() {
@@ -1226,8 +1273,9 @@ function draw() {
     drawRipples()
     drawTrees()
     drawObstacles()
-    drawPlayer()
+    drawSafetyCar()
     drawEnemies()
+    drawPlayer()
     drawSmokeParticles()
     drawRain()
     drawRainFilter()
