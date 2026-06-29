@@ -1306,6 +1306,57 @@ function drawSafetyCar() {
         return
     }
 
+    const roundedY = Math.round(safetyCar.y)
+    const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
+
+    ctx.save()
+    ctx.filter = 'blur(4px)'
+    ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
+    ctx.beginPath()
+    ctx.ellipse(
+        safetyCar.x + safetyCar.width / 2,
+        roundedY + safetyCar.height - 12,
+        safetyCar.width / 3.2,
+        24,
+        0,
+        0,
+        Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+
+    ctx.save()
+    ctx.filter = 'blur(4px)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.beginPath()
+    ctx.ellipse(
+        safetyCar.x + safetyCar.width / 2,
+        roundedY + safetyCar.height - 8,
+        safetyCar.width / 2.4,
+        16,
+        0,
+        0,
+        Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+
+    ctx.save()
+    ctx.translate(
+        safetyCar.x + safetyCar.width / 2,
+        roundedY + safetyCar.height / 2
+    )
+    ctx.rotate(safetyCar.rotation)
+    ctx.drawImage(
+        safetyCarImage,
+        -safetyCar.width / 2,
+        -safetyCar.height / 2,
+        safetyCar.width,
+        safetyCar.height
+    )
+
+    ctx.restore()
+
     ctx.drawImage(
         safetyCarImage,
         safetyCar.x,
