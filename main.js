@@ -102,7 +102,7 @@ let segmentsSinceLastEnemy = 0
 
 const PLAYER_DETECTION_RADIUS = 128
 
-const COLLISION_TOLERANCE = 8
+const COLLISION_TOLERANCE = 6
 
 const TREE_SPAWN_INTERVAL = 8
 let segmentsSinceLastTree = 0
@@ -214,12 +214,14 @@ document.addEventListener('keyup', (e) => {
     pressedKeys[e.key] = false
 })
 
-function checkCollision(rect1, rect2) {
+function checkCollision(a, b) {
+    const t = COLLISION_TOLERANCE
+
     return (
-        rect1.x < rect2.x + rect2.width - COLLISION_TOLERANCE &&
-        rect1.x + rect1.width + COLLISION_TOLERANCE > rect2.x &&
-        rect1.y < rect2.y + rect2.height - COLLISION_TOLERANCE &&
-        rect1.y + rect1.height + COLLISION_TOLERANCE > rect2.y
+        a.x + t < b.x + b.width - t &&
+        a.x + a.width - t > b.x + t &&
+        a.y + t < b.y + b.height - t &&
+        a.y + a.height - t > b.y + t
     )
 }
 
@@ -252,9 +254,11 @@ function createInitialRoadSegments() {
 function createSafetyCar() {
     return {
         x: GAME_WIDTH / 2 - ENEMY_WIDTH / 2,
-        y: 150,
+        y: -256,
+        targetY: 144,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
+        state: 'entering',
     }
 }
 
@@ -861,6 +865,8 @@ function startRain() {
 
         if (!safetyCar) {
             safetyCar = createSafetyCar()
+        } else {
+            safetyCar.state = 'entering'
         }
     }
 }
@@ -872,10 +878,11 @@ function stopRain() {
         rainTargetCount = 0
         player.speed = 2
 
-        safetyCar = null
+        if (safetyCar) {
+            safetyCar.state = 'exiting'
+        }
     }
 }
-
 function toggleRainRandomly() {
     const nextToggleTime = (Math.random() * 24 + 8) * 1000
 
@@ -913,12 +920,30 @@ function updateSafetyCar() {
     safetyCar.x += (targetX - safetyCar.x) * 0.04
 
     const padding = 32
-
     const minX = targetSegment.x + padding
     const maxX =
         targetSegment.x + targetSegment.width - safetyCar.width - padding
 
     safetyCar.x = Math.max(minX, Math.min(maxX, safetyCar.x))
+
+    const ENTRY_SPEED = 4
+    const EXIT_SPEED = 4
+
+    if (safetyCar.state === 'entering') {
+        safetyCar.y += ENTRY_SPEED
+
+        if (safetyCar.y >= safetyCar.targetY) {
+            safetyCar.y = safetyCar.targetY
+            safetyCar.state = 'active'
+        }
+    } else if (safetyCar.state === 'exiting') {
+        safetyCar.y -= EXIT_SPEED
+        if (safetyCar.y + safetyCar.height < 0) {
+            safetyCar.y = -safetyCar.height
+            safetyCar.state = null
+            safetyCar = null
+        }
+    }
 }
 
 function updateGhostTrail() {
