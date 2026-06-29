@@ -102,7 +102,7 @@ let segmentsSinceLastEnemy = 0
 
 const PLAYER_DETECTION_RADIUS = 128
 
-const COLLISION_TOLERANCE = 6
+const COLLISION_TOLERANCE = 8
 
 const TREE_SPAWN_INTERVAL = 8
 let segmentsSinceLastTree = 0
@@ -888,6 +888,39 @@ function toggleRainRandomly() {
     rainToggleInterval = setTimeout(toggleRainRandomly, nextToggleTime)
 }
 
+function updateSafetyCar() {
+    if (!safetyCar) {
+        return
+    }
+
+    const lookAheadY = safetyCar.y - 144
+
+    let targetSegment = roadSegments[roadSegments.length - 1]
+
+    for (const segment of roadSegments) {
+        if (
+            lookAheadY >= segment.y &&
+            lookAheadY < segment.y + road.segmentHeight
+        ) {
+            targetSegment = segment
+            break
+        }
+    }
+
+    const targetX =
+        targetSegment.x + targetSegment.width / 2 - safetyCar.width / 2
+
+    safetyCar.x += (targetX - safetyCar.x) * 0.04
+
+    const padding = 32
+
+    const minX = targetSegment.x + padding
+    const maxX =
+        targetSegment.x + targetSegment.width - safetyCar.width - padding
+
+    safetyCar.x = Math.max(minX, Math.min(maxX, safetyCar.x))
+}
+
 function updateGhostTrail() {
     let currentPlayerRoadSegment = null
     for (const segment of roadSegments) {
@@ -1240,6 +1273,7 @@ function update() {
     updateRain()
     updateGhostTrail()
     updateSmoke()
+    updateSafetyCar()
 }
 
 function drawSafetyCar() {
