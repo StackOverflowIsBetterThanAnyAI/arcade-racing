@@ -17,19 +17,19 @@ canvas.width = GAME_WIDTH
 canvas.height = GAME_HEIGHT
 
 const playerImage = new Image()
-playerImage.src = './player.png'
+playerImage.src = './src/assets/player.png'
 
 const obstacleImage = new Image()
-obstacleImage.src = './banana.png'
+obstacleImage.src = './src/assets/banana.png'
 
 const treeImage = new Image()
-treeImage.src = './tree.png'
+treeImage.src = './src/assets/tree.png'
 
 const enemyImage = new Image()
-enemyImage.src = './enemy.png'
+enemyImage.src = './src/assets/enemy.png'
 
 const safetyCarImage = new Image()
-safetyCarImage.src = './safetycar.png'
+safetyCarImage.src = './src/assets/safetycar.png'
 
 let imagesLoaded = 0
 const totalImages = 5
