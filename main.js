@@ -102,6 +102,9 @@ const MAX_OFFSET_CHANGE = 24
 const pressedKeys = {}
 
 let roadSegments = []
+// The road is generated this far above the screen, so new objects can be
+// placed on segments that already exist instead of guessing the road ahead.
+const ROAD_LOOKAHEAD = 256
 const MAX_ROAD_WIDTH = 448
 const MIN_ROAD_WIDTH = 288
 let shouldDrawDash = true
@@ -438,7 +441,11 @@ function checkNewHighScore() {
 
 function createInitialRoadSegments() {
     let segments = []
-    const initialSegmentsCount = Math.ceil(GAME_HEIGHT / road.segmentHeight)
+    const bottomSegmentY =
+        (Math.ceil(GAME_HEIGHT / road.segmentHeight) - 1) * road.segmentHeight
+    const initialSegmentsCount = Math.ceil(
+        (GAME_HEIGHT + ROAD_LOOKAHEAD) / road.segmentHeight
+    )
     const initialRoadWidth = INITIAL_ROAD_STATE.width
     const initialRoadX = (GAME_WIDTH - initialRoadWidth) / 2
 
@@ -447,7 +454,7 @@ function createInitialRoadSegments() {
     // Ordered bottom to top: new segments are always appended above the last one.
     for (let i = 0; i < initialSegmentsCount; i++) {
         segments.push({
-            y: (initialSegmentsCount - 1 - i) * road.segmentHeight,
+            y: bottomSegmentY - i * road.segmentHeight,
             width: initialRoadWidth,
             x: initialRoadX,
             shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
@@ -760,7 +767,9 @@ function getRandomColor(colors) {
     return colors[Math.floor(Math.random() * colors.length)]
 }
 
-function generateEnemyCar(roadSegment) {
+function generateEnemyCar() {
+    const y = -ENEMY_HEIGHT - Math.random() * 192
+    const roadSegment = getSegmentAt(y + ENEMY_HEIGHT / 2)
     const safeMargin = 16
     const availableWidth = roadSegment.width - ENEMY_WIDTH - safeMargin * 2
     const baseX = roadSegment.x + safeMargin + Math.random() * availableWidth
@@ -770,7 +779,7 @@ function generateEnemyCar(roadSegment) {
     return {
         baseX: baseX,
         x: baseX,
-        y: -ENEMY_HEIGHT - Math.random() * 192,
+        y: y,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         isCrashing: false,
@@ -826,7 +835,8 @@ function generateRipple(roadSegment) {
         rippleColor = getRandomColor(SHOULDER_RIPPLE_COLORS)
     }
 
-    const rippleY = -rippleSize - Math.random() * GAME_HEIGHT * 0.1
+    const rippleY =
+        roadSegment.y + Math.random() * (road.segmentHeight - rippleSize)
 
     return {
         x: rippleX,
@@ -868,16 +878,39 @@ function generateRoadSegment(previousSegment) {
     }
 }
 
-function generateObstacle(roadSegment) {
+function getSegmentAt(y) {
+    return (
+        roadSegments.find(
+            (segment) => y >= segment.y && y < segment.y + road.segmentHeight
+        ) || roadSegments[roadSegments.length - 1]
+    )
+}
+
+// Objects are placed on the two newest segments, whose shape is already known.
+// Their x range has to fit both, because the road shifts from one to the next.
+function getTopTwoSegments() {
+    return roadSegments.slice(-2)
+}
+
+function generateObstacle() {
     const obstacleWidth =
         Math.random() < OBSTACLE_LARGE_CHANCE
             ? OBSTACLE_LARGE_SIZE
             : OBSTACLE_SMALL_SIZE
     const obstacleHeight = obstacleWidth
 
+    const [lowerSegment, upperSegment] = getTopTwoSegments()
+    const roadLeft = Math.max(lowerSegment.x, upperSegment.x)
+    const roadRight = Math.min(
+        lowerSegment.x + lowerSegment.width,
+        upperSegment.x + upperSegment.width
+    )
+
     const obstacleX =
-        roadSegment.x + Math.random() * (roadSegment.width - obstacleWidth)
-    const obstacleY = -obstacleHeight - Math.random() * GAME_HEIGHT * 0.5
+        roadLeft + Math.random() * (roadRight - roadLeft - obstacleWidth)
+    // Bottom-aligned with the lower segment, so even a 48px banana only
+    // reaches into the upper one.
+    const obstacleY = lowerSegment.y + road.segmentHeight - obstacleHeight
 
     return {
         x: obstacleX,
@@ -888,39 +921,41 @@ function generateObstacle(roadSegment) {
 }
 
 function generateTree() {
-    const side = Math.random() < 0.5 ? 'left' : 'right'
-    let treeX
-    const topSegment = roadSegments[roadSegments.length - 1]
+    const [lowerSegment, upperSegment] = getTopTwoSegments()
 
     const padding = 16
     const roadToTreeBuffer = 24
 
-    if (side === 'left') {
-        const minX = padding
-        const maxX = topSegment.x - TREE_WIDTH - roadToTreeBuffer
-        if (maxX <= minX) {
-            treeX = minX
-        } else {
-            treeX = Math.random() * (maxX - minX) + minX
-        }
-    } else {
-        const minX = topSegment.x + topSegment.width + roadToTreeBuffer
-        const maxX = GAME_WIDTH - TREE_WIDTH - padding
-        if (maxX <= minX) {
-            treeX = minX
-        } else {
-            treeX = Math.random() * (maxX - minX) + minX
-        }
+    const leftMinX = padding
+    const leftMaxX =
+        Math.min(lowerSegment.x, upperSegment.x) - TREE_WIDTH - roadToTreeBuffer
+    const rightMinX =
+        Math.max(
+            lowerSegment.x + lowerSegment.width,
+            upperSegment.x + upperSegment.width
+        ) + roadToTreeBuffer
+    const rightMaxX = GAME_WIDTH - TREE_WIDTH - padding
+
+    const sides = []
+    if (leftMaxX >= leftMinX) {
+        sides.push({ name: 'left', minX: leftMinX, maxX: leftMaxX })
+    }
+    if (rightMaxX >= rightMinX) {
+        sides.push({ name: 'right', minX: rightMinX, maxX: rightMaxX })
+    }
+    if (sides.length === 0) {
+        return null
     }
 
-    const treeY = topSegment.y - TREE_HEIGHT - Math.random() * GAME_HEIGHT * 0.2
+    const side = sides[Math.floor(Math.random() * sides.length)]
 
     return {
-        x: treeX,
-        y: treeY,
+        x: Math.random() * (side.maxX - side.minX) + side.minX,
+        // The 64px tree covers exactly the two segments it was checked against.
+        y: upperSegment.y,
         width: TREE_WIDTH,
         height: TREE_HEIGHT,
-        side: side,
+        side: side.name,
     }
 }
 
@@ -1209,7 +1244,7 @@ function update(dt) {
         roadSegments.shift()
     }
 
-    while (roadSegments[roadSegments.length - 1].y >= -road.segmentHeight) {
+    while (roadSegments[roadSegments.length - 1].y >= -ROAD_LOOKAHEAD) {
         const newSegment = generateRoadSegment(
             roadSegments[roadSegments.length - 1]
         )
@@ -1219,19 +1254,22 @@ function update(dt) {
 
         segmentsSinceLastObstacle++
         if (segmentsSinceLastObstacle >= obstacle_spawn_interval) {
-            obstacles.push(generateObstacle(newSegment))
+            obstacles.push(generateObstacle())
             segmentsSinceLastObstacle = 0
         }
 
         segmentsSinceLastEnemy++
         if (segmentsSinceLastEnemy >= enemy_spawn_interval) {
-            enemies.push(generateEnemyCar(newSegment))
+            enemies.push(generateEnemyCar())
             segmentsSinceLastEnemy = 0
         }
 
         segmentsSinceLastTree++
         if (segmentsSinceLastTree >= TREE_SPAWN_INTERVAL) {
-            trees.push(generateTree())
+            const tree = generateTree()
+            if (tree) {
+                trees.push(tree)
+            }
             segmentsSinceLastTree = 0
         }
 
