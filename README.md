@@ -8,4 +8,4 @@ Watch out, they won't just let you pass by.
 
 What might sound easy on a regular track, could become quite challenging when it starts raining. However, the safety car can help you with that.
 
-![Arcade Racing Gameplay](https://github.com/user-attachments/assets/e7f46401-3e11-4344-9f1f-40bfa36c2f66)
+![Arcade Racing Gameplay](./docs/preview.png)
