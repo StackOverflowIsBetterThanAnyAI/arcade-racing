@@ -1,9 +1,7 @@
 async function onAssetsLoaded() {
-    await document.fonts.load("48px 'Press Start 2P'")
-    await document.fonts.load("32px 'Press Start 2P'")
-    await document.fonts.load("28px 'Press Start 2P'")
-    await document.fonts.load("24px 'Press Start 2P'")
+    await document.fonts.load("16px 'Press Start 2P'")
 
+    assetsReady = true
     resetGame()
 }
 
@@ -15,6 +13,13 @@ const GAME_HEIGHT = 600
 
 canvas.width = GAME_WIDTH
 canvas.height = GAME_HEIGHT
+
+// Keep pixel art crisp instead of letting the browser smooth scaled sprites.
+ctx.imageSmoothingEnabled = false
+
+// Size of one "chunky" pixel for effects, shadows, rain and smoke.
+const PIXEL_SIZE = 4
+const FONT = "'Press Start 2P', monospace"
 
 const playerImage = new Image()
 playerImage.src = './src/assets/player.png'
@@ -33,6 +38,7 @@ safetyCarImage.src = './src/assets/safetycar.png'
 
 let imagesLoaded = 0
 const totalImages = 5
+let assetsReady = false
 
 function onImageLoad() {
     imagesLoaded++
@@ -42,24 +48,44 @@ function onImageLoad() {
     }
 }
 
-playerImage.onload = onImageLoad
-obstacleImage.onload = onImageLoad
-treeImage.onload = onImageLoad
-enemyImage.onload = onImageLoad
-safetyCarImage.onload = onImageLoad
+function onImageError(e) {
+    console.error('Failed to load image:', e.target.src)
+    ctx.fillStyle = '#f1f1f1ff'
+    ctx.font = '24px monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('Failed to load assets', GAME_WIDTH / 2, GAME_HEIGHT / 2)
+}
+
+for (const image of [
+    playerImage,
+    obstacleImage,
+    treeImage,
+    enemyImage,
+    safetyCarImage,
+]) {
+    image.onload = onImageLoad
+    image.onerror = onImageError
+}
+
+const FRAME_DURATION = 1000 / 60
+const MAX_DELTA = 3
+let lastFrameTime = 0
+let animationFrameId = null
 
 const INITIAL_PLAYER_STATE = {
     width: 48,
     height: 64,
     x: GAME_WIDTH / 2 - 24,
     y: GAME_HEIGHT - 64 - 16,
-    speed: 2,
+    speed: 2.75,
 }
+
+const PLAYER_RAIN_SPEED = 3.75
 
 const INITIAL_ROAD_STATE = {
     width: 320,
     segmentHeight: 32,
-    speed: 2,
+    speed: 2.25,
     color: '#888',
     shoulderColor: '#437a55ff',
 }
@@ -69,24 +95,22 @@ const MAX_ROAD_SPEED = 5
 let player = { ...INITIAL_PLAYER_STATE }
 let road = { ...INITIAL_ROAD_STATE }
 
-let ghostTrail = []
-const GHOST_LENGTH = 8
-
 const MIN_WIDTH_CHANGE = -16
 const MAX_WIDTH_CHANGE = 16
 const MAX_OFFSET_CHANGE = 24
 
 const pressedKeys = {}
 
-let initialSegmentsCount
 let roadSegments = []
 const MAX_ROAD_WIDTH = 448
 const MIN_ROAD_WIDTH = 288
 let shouldDrawDash = true
 
 let obstacles = []
-const OBSTACLE_MIN_WIDTH = 32
-const OBSTACLE_MAX_WIDTH = 48
+// Only two fixed sizes, so every banana is scaled the same way.
+const OBSTACLE_SMALL_SIZE = 32
+const OBSTACLE_LARGE_SIZE = 48
+const OBSTACLE_LARGE_CHANCE = 0.5
 const INITIAL_OBSTACLE_SPAWN_INTERVAL = 32
 let obstacle_spawn_interval = INITIAL_OBSTACLE_SPAWN_INTERVAL
 const MIN_OBSTACLE_SPAWN_INTERVAL = 8
@@ -113,20 +137,20 @@ let trees = []
 let ripples = []
 const RIPPLE_SPAWN_INTERVAL = 1
 let segmentsSinceLastRipple = 0
-const RIPPLE_MIN_RADIUS = 2
-const RIPPLE_MAX_RADIUS = 8
 
 const RIPPLE_SHOULDER_PADDING = 8
 const RIPPLE_ROAD_BUFFER = 8
 
-const SHOULDER_RIPPLE_COLORS = [
-    { r: 70, g: 120, b: 80 },
-    { r: 100, g: 150, b: 110 },
-    { r: 90, g: 70, b: 50 },
-    { r: 120, g: 90, b: 60 },
-]
+// Small fixed palettes instead of random translucent colors, like the
+// limited color sets of old arcade hardware.
+const ROAD_RIPPLE_COLORS = ['#7a7a7a', '#949494', '#6e6e6e']
+const SHOULDER_RIPPLE_COLORS = ['#3a6b4a', '#4f8a5f', '#5c4a32', '#36603f']
 
 let safetyCar = null
+const SAFETY_CAR_ENTRY_DURATION = 90
+const SAFETY_CAR_SWAY_SPEED = 0.03
+const SAFETY_CAR_BOB_SPEED = 0.02
+const SAFETY_CAR_BOB_DISTANCE = 12
 
 let score = 0
 let highScore = parseInt(localStorage.getItem('highScore')) || 0
@@ -135,37 +159,218 @@ let isGameOver = false
 let gameStarted = false
 let speedIncreasedForThisMilestone = false
 
-const RAIN_COLOR = 'rgba(156, 214, 233, 0.6)'
+const RAIN_COLOR = '#9cd6e9'
 const RAIN_COUNT = 192
 const RAIN_SPEED_MIN = 8
 const RAIN_SPEED_MAX = 16
 const RAIN_LENGTH_MIN = 16
 const RAIN_LENGTH_MAX = 32
 const RAIN_ANGLE = Math.PI / 16
+const RAIN_DIRECTION_X = Math.sin(RAIN_ANGLE)
+const RAIN_DIRECTION_Y = Math.cos(RAIN_ANGLE)
 
 let rainDrops = []
-let isRaining = true
-let rainToggleInterval = null
+let isRaining = false
+let rainToggleTimer = 0
 let isTransitioningRain = false
 let rainTargetCount = RAIN_COUNT
 let currentRainCount = 0
 let rainFilterOpacity = 0
 const RAIN_FILTER_FADE_SPEED = 0.005
 const RAIN_FILTER_MAX_OPACITY = 0.4
+// Old hardware faded palettes in a few hard steps rather than smoothly.
+const RAIN_FILTER_STEP = 0.1
 
 let smokeParticles = []
-const SMOKE_COLOR = 'rgba(100, 100, 100, 0.4)'
+// Opaque puffs that get lighter as they dissolve, from young to old.
+const SMOKE_COLORS = ['#4a4a4a', '#6a6a6a', '#8c8c8c']
 const SMOKE_FADE_SPEED = 0.008
-const SMOKE_GROW_SPEED = 0.4
+const SMOKE_GROW_SPEED = 0.2
 const SMOKE_MIN_SIZE = 4
 const SMOKE_MAX_SIZE = 12
+const SMOKE_PARTICLES_PER_FRAME = 0.5
+const MAX_SMOKE_PARTICLES = 200
+
+const BLINK_INTERVAL = 500
+const TEXT_COLOR = '#f1f1f1'
+const TEXT_SHADOW_COLOR = '#000000'
+const TITLE_COLOR = '#ffd800'
+const TITLE_SHADOW_COLOR = '#c00000'
+const LABEL_COLOR = '#ff4040'
+
+function snapToPixel(value) {
+    return Math.round(value / PIXEL_SIZE) * PIXEL_SIZE
+}
+
+// Hard-edged ellipse on the chunky pixel grid. Dithered sprites only fill every
+// other block (checkerboard), the classic way to fake transparent shadows on
+// hardware without alpha blending.
+function createPixelEllipseSprite(radiusX, radiusY, color, isDithered) {
+    const columns = Math.max(1, Math.round((radiusX * 2) / PIXEL_SIZE))
+    const rows = Math.max(1, Math.round((radiusY * 2) / PIXEL_SIZE))
+    const sprite = document.createElement('canvas')
+    sprite.width = columns * PIXEL_SIZE
+    sprite.height = rows * PIXEL_SIZE
+
+    const spriteCtx = sprite.getContext('2d')
+    spriteCtx.fillStyle = color
+    for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+            const nx = (column + 0.5 - columns / 2) / (columns / 2)
+            const ny = (row + 0.5 - rows / 2) / (rows / 2)
+            const isInside = nx * nx + ny * ny <= 1
+            const isDitherGap = isDithered && (row + column) % 2 === 1
+            if (isInside && !isDitherGap) {
+                spriteCtx.fillRect(
+                    column * PIXEL_SIZE,
+                    row * PIXEL_SIZE,
+                    PIXEL_SIZE,
+                    PIXEL_SIZE
+                )
+            }
+        }
+    }
+    return sprite
+}
+
+// Three blocks wide exhaust flame: yellow core, orange edges, tapered tip.
+function createFlameSprite(length) {
+    const sprite = document.createElement('canvas')
+    sprite.width = PIXEL_SIZE * 3
+    sprite.height = PIXEL_SIZE * length
+
+    const spriteCtx = sprite.getContext('2d')
+    for (let row = 0; row < length; row++) {
+        const y = row * PIXEL_SIZE
+        if (row < length - 1) {
+            spriteCtx.fillStyle = '#ff5500'
+            spriteCtx.fillRect(0, y, PIXEL_SIZE, PIXEL_SIZE)
+            spriteCtx.fillRect(PIXEL_SIZE * 2, y, PIXEL_SIZE, PIXEL_SIZE)
+            spriteCtx.fillStyle = '#ffd800'
+        } else {
+            spriteCtx.fillStyle = '#ff5500'
+        }
+        spriteCtx.fillRect(PIXEL_SIZE, y, PIXEL_SIZE, PIXEL_SIZE)
+    }
+    return sprite
+}
+
+function createDitherOverlaySprite() {
+    const sprite = document.createElement('canvas')
+    sprite.width = GAME_WIDTH
+    sprite.height = GAME_HEIGHT
+
+    const spriteCtx = sprite.getContext('2d')
+    spriteCtx.fillStyle = '#000000'
+    for (let y = 0; y < GAME_HEIGHT; y += PIXEL_SIZE) {
+        const offset = (y / PIXEL_SIZE) % 2 === 0 ? 0 : PIXEL_SIZE
+        for (let x = offset; x < GAME_WIDTH; x += PIXEL_SIZE * 2) {
+            spriteCtx.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE)
+        }
+    }
+    return sprite
+}
+
+function createScanlinesSprite() {
+    const sprite = document.createElement('canvas')
+    sprite.width = GAME_WIDTH
+    sprite.height = GAME_HEIGHT
+
+    const spriteCtx = sprite.getContext('2d')
+    spriteCtx.fillStyle = 'rgba(0, 0, 0, 0.15)'
+    for (let y = 0; y < GAME_HEIGHT; y += 8) {
+        spriteCtx.fillRect(0, y, GAME_WIDTH, 2)
+    }
+    return sprite
+}
+
+// All shadows and effects are pre-rendered once and only copied with drawImage.
+const CAR_SHADOW_SPRITE = createPixelEllipseSprite(
+    ENEMY_WIDTH / 2.4,
+    12,
+    '#000000',
+    true
+)
+const OBSTACLE_SHADOW_COLOR = '#3c3c3c'
+const OBSTACLE_SHADOW_SPRITES = {
+    [OBSTACLE_SMALL_SIZE]: createPixelEllipseSprite(
+        OBSTACLE_SMALL_SIZE / 2.4,
+        8,
+        OBSTACLE_SHADOW_COLOR,
+        true
+    ),
+    [OBSTACLE_LARGE_SIZE]: createPixelEllipseSprite(
+        OBSTACLE_LARGE_SIZE / 2.4,
+        10,
+        OBSTACLE_SHADOW_COLOR,
+        true
+    ),
+}
+const TREE_SHADOW_SPRITE = createPixelEllipseSprite(
+    TREE_WIDTH / 1.8,
+    12,
+    '#24452f',
+    true
+)
+// Two flame lengths that alternate for a flickering exhaust.
+const FLAME_SPRITES = [createFlameSprite(2), createFlameSprite(3)]
+const DITHER_OVERLAY_SPRITE = createDitherOverlaySprite()
+const SCANLINES_SPRITE = createScanlinesSprite()
+
+function drawCenteredSprite(sprite, centerX, centerY) {
+    ctx.drawImage(
+        sprite,
+        snapToPixel(centerX - sprite.width / 2),
+        Math.round(centerY - sprite.height / 2)
+    )
+}
+
+function isBlinkOn() {
+    return Math.floor(performance.now() / BLINK_INTERVAL) % 2 === 0
+}
+
+function drawExhaustFlame(car, roundedY) {
+    const flame = FLAME_SPRITES[Math.floor(performance.now() / 80) % 2]
+    ctx.drawImage(
+        flame,
+        Math.round(car.x + car.width / 2 - flame.width / 2),
+        roundedY + car.height - PIXEL_SIZE
+    )
+}
+
+function drawPixelText(text, x, y, color, shadowColor = TEXT_SHADOW_COLOR) {
+    ctx.fillStyle = shadowColor
+    ctx.fillText(text, x + PIXEL_SIZE, y + PIXEL_SIZE)
+    ctx.fillStyle = color
+    ctx.fillText(text, x, y)
+}
+
+function drawPanel(x, y, width, height) {
+    ctx.fillStyle = TEXT_COLOR
+    ctx.fillRect(
+        x - PIXEL_SIZE,
+        y - PIXEL_SIZE,
+        width + PIXEL_SIZE * 2,
+        height + PIXEL_SIZE * 2
+    )
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(x, y, width, height)
+}
+
+function formatScore(value) {
+    return String(value).padStart(6, '0')
+}
+
+function startLoop() {
+    cancelAnimationFrame(animationFrameId)
+    lastFrameTime = performance.now()
+    gameLoop()
+}
 
 function resetGame() {
     player = { ...INITIAL_PLAYER_STATE }
     road = { ...INITIAL_ROAD_STATE }
 
-    roadSegments = []
-    initialSegmentsCount = Math.ceil(GAME_HEIGHT / road.segmentHeight)
     roadSegments = createInitialRoadSegments()
 
     obstacles = []
@@ -177,36 +382,34 @@ function resetGame() {
     isGameOver = false
     newHighScoreAchieved = false
     speedIncreasedForThisMilestone = false
-    ghostTrail = []
-    shouldDrawDash = true
     ripples = []
     segmentsSinceLastRipple = 0
     enemies = []
     enemy_spawn_interval = INITIAL_ENEMY_SPAWN_INTERVAL
     segmentsSinceLastEnemy = 0
     rainDrops = []
-    isRaining = true
+    isRaining = false
     isTransitioningRain = false
     currentRainCount = 0
-    rainTargetCount = RAIN_COUNT
+    rainTargetCount = 0
     rainFilterOpacity = 0
-    clearTimeout(rainToggleInterval)
-    rainToggleInterval = null
-    toggleRainRandomly()
+    scheduleNextRainToggle()
     smokeParticles = []
     safetyCar = null
 
-    gameLoop()
+    startLoop()
 }
 
 document.addEventListener('keydown', (e) => {
     pressedKeys[e.key] = true
-    if (isGameOver && e.key === ' ') {
-        resetGame()
+    if (!assetsReady || e.key !== ' ' || e.repeat) {
+        return
     }
-    if (!gameStarted && e.key === ' ') {
+    if (isGameOver) {
+        resetGame()
+    } else if (!gameStarted) {
         gameStarted = true
-        gameLoop()
+        startLoop()
     }
 })
 
@@ -235,12 +438,16 @@ function checkNewHighScore() {
 
 function createInitialRoadSegments() {
     let segments = []
+    const initialSegmentsCount = Math.ceil(GAME_HEIGHT / road.segmentHeight)
     const initialRoadWidth = INITIAL_ROAD_STATE.width
     const initialRoadX = (GAME_WIDTH - initialRoadWidth) / 2
 
+    shouldDrawDash = true
+
+    // Ordered bottom to top: new segments are always appended above the last one.
     for (let i = 0; i < initialSegmentsCount; i++) {
         segments.push({
-            y: i * road.segmentHeight,
+            y: (initialSegmentsCount - 1 - i) * road.segmentHeight,
             width: initialRoadWidth,
             x: initialRoadX,
             shoulderStripeColor: i % 2 === 0 ? '#f50000ff' : '#f1f1f1ff',
@@ -254,115 +461,90 @@ function createInitialRoadSegments() {
 function createSafetyCar() {
     return {
         x: GAME_WIDTH / 2 - ENEMY_WIDTH / 2,
-        y: -256,
+        y: -ENEMY_HEIGHT,
         targetY: 144,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         state: 'entering',
+        entryStartY: -ENEMY_HEIGHT,
+        entryProgress: 0,
+        swayTime: 0,
+        bobTime: 0,
     }
 }
 
 function drawEnemies() {
     for (const enemy of enemies) {
         const roundedY = Math.round(enemy.y)
-        const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
+        // Crashed cars shake sideways instead of rotating: rotated sprites
+        // would smear the pixel art.
+        const shakeOffset = enemy.isCrashing
+            ? (Math.floor(performance.now() / 60) % 2) * 4 - 2
+            : 0
+        const x = Math.round(enemy.x) + shakeOffset
 
-        ctx.save()
-        ctx.filter = 'blur(4px)'
-        ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
-        ctx.beginPath()
-        ctx.ellipse(
-            enemy.x + enemy.width / 2,
-            roundedY + enemy.height - 12,
-            enemy.width / 3.2,
-            24,
-            0,
-            0,
-            Math.PI * 2
+        drawCenteredSprite(
+            CAR_SHADOW_SPRITE,
+            x + enemy.width / 2,
+            roundedY + enemy.height - 8
         )
-        ctx.fill()
-        ctx.restore()
-
-        ctx.save()
-        ctx.filter = 'blur(4px)'
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.beginPath()
-        ctx.ellipse(
-            enemy.x + enemy.width / 2,
-            roundedY + enemy.height - 8,
-            enemy.width / 2.4,
-            16,
-            0,
-            0,
-            Math.PI * 2
-        )
-        ctx.fill()
-        ctx.restore()
-
-        ctx.save()
-        ctx.translate(enemy.x + enemy.width / 2, roundedY + enemy.height / 2)
-        ctx.rotate(enemy.rotation)
-        ctx.drawImage(
-            enemyImage,
-            -enemy.width / 2,
-            -enemy.height / 2,
-            enemy.width,
-            enemy.height
-        )
-
-        ctx.restore()
+        drawExhaustFlame({ ...enemy, x: x }, roundedY)
+        ctx.drawImage(enemyImage, x, roundedY, enemy.width, enemy.height)
     }
 }
 
 function drawGameOver() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-    ctx.fillStyle = '#f1f1f1ff'
+    ctx.drawImage(DITHER_OVERLAY_SPRITE, 0, 0)
+    drawPanel(112, 152, GAME_WIDTH - 224, 296)
+
     ctx.textAlign = 'center'
+    ctx.font = `48px ${FONT}`
+    drawPixelText(
+        'GAME OVER',
+        GAME_WIDTH / 2,
+        232,
+        TITLE_COLOR,
+        TITLE_SHADOW_COLOR
+    )
+
+    ctx.font = `24px ${FONT}`
+    drawPixelText('SCORE', GAME_WIDTH / 2, 288, LABEL_COLOR)
+    drawPixelText(formatScore(score), GAME_WIDTH / 2, 320, TEXT_COLOR)
 
     if (newHighScoreAchieved) {
-        ctx.font = "40px 'Press Start 2P'"
-        ctx.fillText('NEW HIGHSCORE!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 144)
+        if (isBlinkOn()) {
+            drawPixelText('NEW HI-SCORE!', GAME_WIDTH / 2, 368, TITLE_COLOR)
+        }
     } else {
-        ctx.font = "28px 'Press Start 2P'"
-        ctx.fillText(
-            'Highscore: ' + highScore,
+        drawPixelText(
+            'HI-SCORE ' + formatScore(highScore),
             GAME_WIDTH / 2,
-            GAME_HEIGHT / 2 + 128
+            368,
+            TEXT_COLOR
         )
     }
 
-    ctx.font = "bold 48px 'Press Start 2P'"
-    ctx.textAlign = 'center'
-    ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 64)
-
-    ctx.font = "32px 'Press Start 2P'"
-    ctx.fillText('Final Score: ' + score, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 8)
-    ctx.fillText('Press SPACE to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 64)
+    if (isBlinkOn()) {
+        ctx.font = `16px ${FONT}`
+        drawPixelText('PRESS SPACE TO RESTART', GAME_WIDTH / 2, 416, TEXT_COLOR)
+    }
 }
 
 function drawObstacles() {
     for (const obstacle of obstacles) {
         const roundedY = Math.round(obstacle.y)
-        ctx.save()
-        ctx.filter = 'blur(4px)'
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.beginPath()
-        ctx.ellipse(
-            obstacle.x + obstacle.width / 2,
-            roundedY + obstacle.height - 8,
-            obstacle.width / 2.4,
-            16,
-            0,
-            0,
-            Math.PI * 2
+        const x = Math.round(obstacle.x)
+        drawCenteredSprite(
+            OBSTACLE_SHADOW_SPRITES[obstacle.width],
+            x + obstacle.width / 2,
+            // Centered on the bottom edge so the shadow peeks out below the
+            // banana instead of showing only a few blocks between its gaps.
+            roundedY + obstacle.height
         )
-        ctx.fill()
-        ctx.restore()
 
         ctx.drawImage(
             obstacleImage,
-            obstacle.x,
+            x,
             roundedY,
             obstacle.width,
             obstacle.height
@@ -372,144 +554,76 @@ function drawObstacles() {
 
 function drawPlayer() {
     const roundedPlayerY = Math.round(player.y)
-    const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
+    const x = Math.round(player.x)
 
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
-    ctx.beginPath()
-    ctx.ellipse(
-        player.x + player.width / 2,
-        roundedPlayerY + player.height - 16,
-        player.width / 3.2,
-        24,
-        0,
-        0,
-        Math.PI * 2
-    )
-    ctx.fill()
-    ctx.restore()
-
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = 'rgba(255, 115, 0, 0.2)'
-    ctx.beginPath()
-    ctx.ellipse(
-        player.x + player.width / 2,
-        roundedPlayerY + player.height,
-        player.width / 3.6,
-        32,
-        0,
-        0,
-        Math.PI * 2
-    )
-    ctx.fill()
-    ctx.restore()
-
-    for (let i = 0; i < ghostTrail.length; i++) {
-        const ghost = ghostTrail[i]
-        const alpha = ((i + 1) / (ghostTrail.length + 1)) * 0.7
-
-        const roundedGhostY = Math.round(ghost.y)
-        ctx.save()
-        ctx.globalAlpha = alpha
-        ctx.filter = 'blur(2px) saturate(60%)'
-        ctx.drawImage(
-            playerImage,
-            ghost.x,
-            roundedGhostY,
-            player.width,
-            player.height
-        )
-        ctx.restore()
-    }
-
-    ctx.drawImage(
-        playerImage,
-        player.x,
-        roundedPlayerY,
-        player.width,
-        player.height
-    )
+    drawExhaustFlame({ ...player, x: x }, roundedPlayerY)
+    ctx.drawImage(playerImage, x, roundedPlayerY, player.width, player.height)
 }
 
+// Each drop is a staircase of small blocks instead of an anti-aliased line.
 function drawRain() {
     if (rainDrops.length === 0 && !isTransitioningRain) return
 
-    ctx.strokeStyle = RAIN_COLOR
-    ctx.lineWidth = Math.ceil(Math.random() * 3) + 1
-
+    ctx.fillStyle = RAIN_COLOR
     for (const drop of rainDrops) {
-        ctx.beginPath()
-        ctx.moveTo(drop.x, drop.y)
-        ctx.lineTo(
-            drop.x - Math.sin(RAIN_ANGLE) * drop.length,
-            drop.y - Math.cos(RAIN_ANGLE) * drop.length
-        )
-        ctx.stroke()
+        const steps = Math.round(drop.length / PIXEL_SIZE)
+        for (let i = 0; i < steps; i++) {
+            ctx.fillRect(
+                snapToPixel(drop.x - RAIN_DIRECTION_X * i * PIXEL_SIZE),
+                snapToPixel(drop.y - RAIN_DIRECTION_Y * i * PIXEL_SIZE),
+                PIXEL_SIZE / 2,
+                PIXEL_SIZE
+            )
+        }
     }
 }
 
 function drawRainFilter() {
-    if (rainFilterOpacity > 0) {
-        ctx.save()
-        ctx.fillStyle = `rgba(0, 0, 50, ${rainFilterOpacity})`
+    const steppedOpacity =
+        Math.round(rainFilterOpacity / RAIN_FILTER_STEP) * RAIN_FILTER_STEP
+    if (steppedOpacity > 0) {
+        ctx.fillStyle = `rgba(0, 0, 50, ${steppedOpacity.toFixed(1)})`
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-        ctx.restore()
     }
 }
 
 function drawRipples() {
     for (const ripple of ripples) {
-        const roundedY = Math.round(ripple.y)
-        ctx.save()
-
         ctx.fillStyle = ripple.color
-        ctx.beginPath()
-        ctx.arc(
-            ripple.x + ripple.radius,
-            roundedY + ripple.radius,
-            ripple.radius,
-            0,
-            Math.PI * 2
-        )
-        ctx.fill()
-        ctx.restore()
+        ctx.fillRect(ripple.x, Math.round(ripple.y), ripple.size, ripple.size)
     }
 }
 
 function drawScores() {
-    const scoreText = 'Score: ' + score
-    ctx.font = "24px 'Press Start 2P'"
-    const textWidth = ctx.measureText(scoreText).width
-    const padding = 8
-    const backgroundX = GAME_WIDTH - textWidth - padding * 3
-    const backgroundY = padding / 2
+    const displayedHighScore = Math.max(score, highScore)
+    const hasNewHighScore = score > highScore
+    const boxWidth = 176
+    const boxHeight = 64
+    const top = 8
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(
-        backgroundX,
-        backgroundY,
-        textWidth + padding * 2,
-        24 + padding * 2
-    )
-    ctx.fillStyle = '#f1f1f1ff'
-    ctx.textAlign = 'right'
-    ctx.fillText(scoreText, GAME_WIDTH - 16, 32)
+    ctx.font = `16px ${FONT}`
+    ctx.textAlign = 'center'
 
-    const highScoreText =
-        score >= highScore ? 'New Highscore!' : 'Highscore: ' + highScore
-    ctx.font = "24px 'Press Start 2P'"
-    ctx.textAlign = 'left'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(
-        8,
-        backgroundY,
-        ctx.measureText(highScoreText).width + padding * 2,
-        24 + padding * 2
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(8, top, boxWidth, boxHeight)
+    drawPixelText('HI-SCORE', 8 + boxWidth / 2, top + 26, LABEL_COLOR)
+    drawPixelText(
+        formatScore(displayedHighScore),
+        8 + boxWidth / 2,
+        top + 54,
+        hasNewHighScore ? TITLE_COLOR : TEXT_COLOR
     )
-    ctx.fillStyle = '#f1f1f1ff'
-    ctx.fillText(highScoreText, 16, 32)
+
+    const scoreBoxX = GAME_WIDTH - boxWidth - 8
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(scoreBoxX, top, boxWidth, boxHeight)
+    drawPixelText('SCORE', scoreBoxX + boxWidth / 2, top + 26, LABEL_COLOR)
+    drawPixelText(
+        formatScore(score),
+        scoreBoxX + boxWidth / 2,
+        top + 54,
+        TEXT_COLOR
+    )
 }
 
 function drawSegments() {
@@ -543,77 +657,76 @@ function drawSegments() {
 
         ctx.fillStyle = road.color
         ctx.fillRect(segment.x, roundedY, segment.width, road.segmentHeight)
+    }
 
+    ctx.fillStyle = TEXT_COLOR
+    for (const segment of roadSegments) {
         if (segment.isDashed) {
-            ctx.strokeStyle = '#f1f1f1ff'
-            ctx.lineWidth = 8
-            ctx.setLineDash([24, 32])
-            ctx.beginPath()
-            ctx.moveTo(segment.x + segment.width / 2, segment.y)
-            ctx.lineTo(
-                segment.x + segment.width / 2,
-                segment.y + road.segmentHeight
+            ctx.fillRect(
+                snapToPixel(segment.x + segment.width / 2) - 4,
+                Math.round(segment.y),
+                8,
+                24
             )
-            ctx.stroke()
-            ctx.setLineDash([])
         }
     }
 }
 
 function drawStartScreen() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+    ctx.drawImage(DITHER_OVERLAY_SPRITE, 0, 0)
 
-    ctx.fillStyle = '#f1f1f1ff'
     ctx.textAlign = 'center'
+    ctx.font = `48px ${FONT}`
+    drawPixelText(
+        'ARCADE RACING',
+        GAME_WIDTH / 2,
+        200,
+        TITLE_COLOR,
+        TITLE_SHADOW_COLOR
+    )
 
-    ctx.font = "bold 48px 'Press Start 2P'"
-    ctx.fillText('Arcade Racing', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80)
+    drawPanel(144, 248, GAME_WIDTH - 288, 192)
 
-    ctx.font = "32px 'Press Start 2P'"
-    ctx.fillText('Press SPACE to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2)
+    ctx.font = `24px ${FONT}`
+    if (isBlinkOn()) {
+        drawPixelText('PRESS SPACE', GAME_WIDTH / 2, 296, TEXT_COLOR)
+    }
 
-    ctx.font = "24px 'Press Start 2P'"
-    ctx.fillText('Use Arrow Keys to Move', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50)
+    ctx.font = `16px ${FONT}`
+    drawPixelText('ARROW KEYS TO STEER', GAME_WIDTH / 2, 344, TEXT_COLOR)
 
-    const highScoreText = 'Current Highscore: ' + highScore
-    ctx.font = "bold 28px 'Press Start 2P'"
-    ctx.fillText(highScoreText, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140)
+    drawPixelText('HI-SCORE', GAME_WIDTH / 2, 392, LABEL_COLOR)
+    drawPixelText(formatScore(highScore), GAME_WIDTH / 2, 420, TEXT_COLOR)
 }
 
 function drawSmokeParticles() {
     for (const particle of smokeParticles) {
-        ctx.save()
-        ctx.globalAlpha = particle.alpha
-        ctx.fillStyle = SMOKE_COLOR
-        ctx.beginPath()
-        ctx.arc(particle.x, particle.y, particle.size / 2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
+        const age = Math.min(
+            SMOKE_COLORS.length - 1,
+            Math.floor((1 - particle.alpha) * SMOKE_COLORS.length)
+        )
+        const size = Math.max(PIXEL_SIZE, snapToPixel(particle.size))
+        ctx.fillStyle = SMOKE_COLORS[age]
+        ctx.fillRect(
+            snapToPixel(particle.x - size / 2),
+            snapToPixel(particle.y - size / 2),
+            size,
+            size
+        )
     }
 }
 
 function drawTrees() {
     for (const tree of trees) {
         const roundedY = Math.round(tree.y)
-        ctx.save()
-        ctx.filter = 'blur(4px)'
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-
-        ctx.beginPath()
-        ctx.ellipse(
-            tree.x + tree.width / 2,
-            roundedY + tree.height - 8,
-            tree.width / 1.8,
-            16,
-            0,
-            0,
-            Math.PI * 2
+        const x = Math.round(tree.x)
+        drawCenteredSprite(
+            TREE_SHADOW_SPRITE,
+            x + tree.width / 2,
+            roundedY + tree.height - 8
         )
-        ctx.fill()
-        ctx.restore()
 
-        ctx.drawImage(treeImage, tree.x, roundedY, tree.width, tree.height)
+        ctx.drawImage(treeImage, x, roundedY, tree.width, tree.height)
     }
 }
 
@@ -624,12 +737,8 @@ function enemyCollision(enemy, obj) {
         enemy.waveFrequency = 0
         enemy.targetX = enemy.x
         enemy.baseX = enemy.x
-        if (enemy.x + enemy.width / 2 < obj.x + obj.width / 2) {
-            enemy.rotationDirection = -1
-        } else {
-            enemy.rotationDirection = 1
-        }
         enemy.isSmoking = true
+        enemy.smokeAccumulator = 0
     }
 }
 
@@ -647,53 +756,31 @@ function generateSmokeParticle(x, y) {
     }
 }
 
-function getRandomGreyColor(alpha) {
-    const grey = Math.floor(Math.random() * 100) + 20
-    return `rgba(${grey}, ${grey}, ${grey}, ${alpha.toFixed(2)})`
-}
-
-function getRandomShoulderColor(alpha) {
-    const randomColor =
-        SHOULDER_RIPPLE_COLORS[
-            Math.floor(Math.random() * SHOULDER_RIPPLE_COLORS.length)
-        ]
-    const r = Math.min(
-        255,
-        Math.max(0, randomColor.r + Math.floor(Math.random() * 40) - 20)
-    )
-    const g = Math.min(
-        255,
-        Math.max(0, randomColor.g + Math.floor(Math.random() * 40) - 20)
-    )
-    const b = Math.min(
-        255,
-        Math.max(0, randomColor.b + Math.floor(Math.random() * 40) - 20)
-    )
-    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`
+function getRandomColor(colors) {
+    return colors[Math.floor(Math.random() * colors.length)]
 }
 
 function generateEnemyCar(roadSegment) {
     const safeMargin = 16
     const availableWidth = roadSegment.width - ENEMY_WIDTH - safeMargin * 2
-    const random = Math.random()
-    const baseX = roadSegment.x + safeMargin + random * availableWidth
+    const baseX = roadSegment.x + safeMargin + Math.random() * availableWidth
+    const waveAmplitude = Math.random() * 16 + 8 + (isRaining ? 4 : 0)
+    const waveFrequency = Math.random() * 0.03 + 0.02 + (isRaining ? 0.005 : 0)
 
     return {
         baseX: baseX,
         x: baseX,
-        y: -ENEMY_HEIGHT - random * 192,
+        y: -ENEMY_HEIGHT - Math.random() * 192,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
         isCrashing: false,
-        rotation: 0,
-        rotationDirection: 0,
-        speedY: road.speed - 0.75 - random + 0.125 * isRaining,
+        speedY: road.speed - 0.75 - Math.random() + (isRaining ? 0.125 : 0),
         targetX: baseX,
-        time: random * 1000,
-        waveAmplitude: random * 16 + 8 + 4 * isRaining,
-        waveFrequency: random * 0.03 + 0.02 + 0.005 * isRaining,
-        originalWaveAmplitude: random * 16 + 8 + 4 * isRaining,
-        originalWaveFrequency: random * 0.03 + 0.02 + 0.005 * isRaining,
+        time: Math.random() * 1000,
+        waveAmplitude: waveAmplitude,
+        waveFrequency: waveFrequency,
+        originalWaveAmplitude: waveAmplitude,
+        originalWaveFrequency: waveFrequency,
     }
 }
 
@@ -715,96 +802,77 @@ function generateRaindrop() {
     }
 }
 
+// Ripples are single chunky pixels (sometimes double size) on the pixel grid.
 function generateRipple(roadSegment) {
-    const rippleRadius =
-        Math.random() * (RIPPLE_MAX_RADIUS - RIPPLE_MIN_RADIUS) +
-        RIPPLE_MIN_RADIUS
-    const rippleWidth = rippleRadius * 2
-    const rippleHeight = rippleRadius * 2
+    const rippleSize = Math.random() < 0.8 ? PIXEL_SIZE : PIXEL_SIZE * 2
 
-    let rippleX
     let rippleColor
-    const alpha = Math.random() * 0.3 + 0.1
     const minSpawnX = 0 + RIPPLE_SHOULDER_PADDING
-    const maxSpawnX = GAME_WIDTH - RIPPLE_SHOULDER_PADDING - rippleWidth
+    const maxSpawnX = GAME_WIDTH - RIPPLE_SHOULDER_PADDING - rippleSize
 
-    rippleX = Math.random() * (maxSpawnX - minSpawnX) + minSpawnX
+    const rippleX = snapToPixel(
+        Math.random() * (maxSpawnX - minSpawnX) + minSpawnX
+    )
 
     const roadLeftEdge = roadSegment.x
     const roadRightEdge = roadSegment.x + roadSegment.width
 
     if (
-        rippleX + rippleWidth > roadLeftEdge + RIPPLE_ROAD_BUFFER &&
+        rippleX + rippleSize > roadLeftEdge + RIPPLE_ROAD_BUFFER &&
         rippleX < roadRightEdge - RIPPLE_ROAD_BUFFER
     ) {
-        rippleColor = getRandomGreyColor(alpha)
+        rippleColor = getRandomColor(ROAD_RIPPLE_COLORS)
     } else {
-        rippleColor = getRandomShoulderColor(alpha)
+        rippleColor = getRandomColor(SHOULDER_RIPPLE_COLORS)
     }
 
-    const rippleY = -rippleHeight - Math.random() * GAME_HEIGHT * 0.1
+    const rippleY = -rippleSize - Math.random() * GAME_HEIGHT * 0.1
 
     return {
         x: rippleX,
         y: rippleY,
-        width: rippleWidth,
-        height: rippleHeight,
-        radius: rippleRadius,
+        size: rippleSize,
         color: rippleColor,
     }
 }
 
 function generateRoadSegment(previousSegment) {
-    if (initialSegmentsCount > 0) {
-        initialSegmentsCount--
-        const initialRoadWidth = INITIAL_ROAD_STATE.width
-        const initialRoadX = (GAME_WIDTH - initialRoadWidth) / 2
+    let newWidth =
+        previousSegment.width +
+        (Math.random() * (MAX_WIDTH_CHANGE - MIN_WIDTH_CHANGE) +
+            MIN_WIDTH_CHANGE)
+    newWidth = Math.max(Math.min(MAX_ROAD_WIDTH, newWidth), MIN_ROAD_WIDTH)
 
-        shouldDrawDash = !shouldDrawDash
+    let newX =
+        previousSegment.x +
+        (Math.random() * (MAX_OFFSET_CHANGE * 2) - MAX_OFFSET_CHANGE)
+    newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
 
-        return {
-            y: previousSegment.y - road.segmentHeight,
-            width: initialRoadWidth,
-            x: initialRoadX,
-            shoulderStripeColor:
-                previousSegment.shoulderStripeColor === '#f50000ff'
-                    ? '#f1f1f1ff'
-                    : '#f50000ff',
-            isDashed: shouldDrawDash,
-        }
-    } else {
-        let newWidth =
-            previousSegment.width +
-            (Math.random() * (MAX_WIDTH_CHANGE - MIN_WIDTH_CHANGE) +
-                MIN_WIDTH_CHANGE)
-        newWidth = Math.max(Math.min(MAX_ROAD_WIDTH, newWidth), MIN_ROAD_WIDTH)
+    // Road edges move in whole chunky pixels for a crisp staircase look.
+    newWidth = snapToPixel(newWidth)
+    newX = snapToPixel(newX)
 
-        let newX =
-            previousSegment.x +
-            (Math.random() * (MAX_OFFSET_CHANGE * 2) - MAX_OFFSET_CHANGE)
-        newX = Math.max(48, Math.min(GAME_WIDTH - newWidth - 48, newX))
+    let stripeColor =
+        previousSegment.shoulderStripeColor === '#f50000ff'
+            ? '#f1f1f1ff'
+            : '#f50000ff'
 
-        let stripeColor =
-            previousSegment.shoulderStripeColor === '#f50000ff'
-                ? '#f1f1f1ff'
-                : '#f50000ff'
+    shouldDrawDash = !shouldDrawDash
 
-        shouldDrawDash = !shouldDrawDash
-
-        return {
-            y: previousSegment.y - road.segmentHeight,
-            width: newWidth,
-            x: newX,
-            shoulderStripeColor: stripeColor,
-            isDashed: shouldDrawDash,
-        }
+    return {
+        y: previousSegment.y - road.segmentHeight,
+        width: newWidth,
+        x: newX,
+        shoulderStripeColor: stripeColor,
+        isDashed: shouldDrawDash,
     }
 }
 
 function generateObstacle(roadSegment) {
     const obstacleWidth =
-        Math.random() * (OBSTACLE_MAX_WIDTH - OBSTACLE_MIN_WIDTH) +
-        OBSTACLE_MIN_WIDTH
+        Math.random() < OBSTACLE_LARGE_CHANCE
+            ? OBSTACLE_LARGE_SIZE
+            : OBSTACLE_SMALL_SIZE
     const obstacleHeight = obstacleWidth
 
     const obstacleX =
@@ -861,12 +929,14 @@ function startRain() {
         isRaining = true
         isTransitioningRain = true
         rainTargetCount = RAIN_COUNT
-        player.speed = 3
+        player.speed = PLAYER_RAIN_SPEED
 
         if (!safetyCar) {
             safetyCar = createSafetyCar()
         } else {
             safetyCar.state = 'entering'
+            safetyCar.entryStartY = safetyCar.y
+            safetyCar.entryProgress = 0
         }
     }
 }
@@ -876,26 +946,32 @@ function stopRain() {
         isRaining = false
         isTransitioningRain = true
         rainTargetCount = 0
-        player.speed = 2
+        player.speed = INITIAL_PLAYER_STATE.speed
 
         if (safetyCar) {
             safetyCar.state = 'exiting'
         }
     }
 }
-function toggleRainRandomly() {
-    const nextToggleTime = (Math.random() * 24 + 8) * 1000
+function scheduleNextRainToggle() {
+    rainToggleTimer = (Math.random() * 24 + 8) * 1000
+}
+
+function updateRainToggle(dt) {
+    rainToggleTimer -= dt * FRAME_DURATION
+    if (rainToggleTimer > 0) {
+        return
+    }
 
     if (isRaining) {
         stopRain()
     } else {
         startRain()
     }
-
-    rainToggleInterval = setTimeout(toggleRainRandomly, nextToggleTime)
+    scheduleNextRainToggle()
 }
 
-function updateSafetyCar() {
+function updateSafetyCar(dt) {
     if (!safetyCar) {
         return
     }
@@ -914,10 +990,16 @@ function updateSafetyCar() {
         }
     }
 
-    const targetX =
-        targetSegment.x + targetSegment.width / 2 - safetyCar.width / 2
+    safetyCar.swayTime += dt
+    const swayOffset = Math.sin(safetyCar.swayTime * SAFETY_CAR_SWAY_SPEED) * 24
 
-    safetyCar.x += (targetX - safetyCar.x) * 0.04
+    const targetX =
+        targetSegment.x +
+        targetSegment.width / 2 -
+        safetyCar.width / 2 +
+        swayOffset
+
+    safetyCar.x += (targetX - safetyCar.x) * (1 - Math.pow(0.96, dt))
 
     const padding = 32
     const minX = targetSegment.x + padding
@@ -926,18 +1008,34 @@ function updateSafetyCar() {
 
     safetyCar.x = Math.max(minX, Math.min(maxX, safetyCar.x))
 
-    const ENTRY_SPEED = 4
     const EXIT_SPEED = 4
 
     if (safetyCar.state === 'entering') {
-        safetyCar.y += ENTRY_SPEED
+        // Ease-out cubic: drops in quickly from the top edge and glides into
+        // its position with the speed reaching exactly zero at the end.
+        safetyCar.entryProgress = Math.min(
+            safetyCar.entryProgress + dt / SAFETY_CAR_ENTRY_DURATION,
+            1
+        )
+        const easedProgress = 1 - Math.pow(1 - safetyCar.entryProgress, 3)
+        safetyCar.y =
+            safetyCar.entryStartY +
+            (safetyCar.targetY - safetyCar.entryStartY) * easedProgress
 
-        if (safetyCar.y >= safetyCar.targetY) {
-            safetyCar.y = safetyCar.targetY
+        if (safetyCar.entryProgress >= 1) {
             safetyCar.state = 'active'
+            safetyCar.bobTime = 0
         }
+    } else if (safetyCar.state === 'active') {
+        // Slight vertical drift so the car does not look glued to its spot.
+        // (1 - cos) starts with zero speed, so it blends in without a jerk.
+        safetyCar.bobTime += dt
+        safetyCar.y =
+            safetyCar.targetY +
+            ((1 - Math.cos(safetyCar.bobTime * SAFETY_CAR_BOB_SPEED)) / 2) *
+                SAFETY_CAR_BOB_DISTANCE
     } else if (safetyCar.state === 'exiting') {
-        safetyCar.y -= EXIT_SPEED
+        safetyCar.y -= EXIT_SPEED * dt
         if (safetyCar.y + safetyCar.height < 0) {
             safetyCar.y = -safetyCar.height
             safetyCar.state = null
@@ -946,7 +1044,7 @@ function updateSafetyCar() {
     }
 }
 
-function updateGhostTrail() {
+function checkOffRoad() {
     let currentPlayerRoadSegment = null
     for (const segment of roadSegments) {
         if (
@@ -956,12 +1054,6 @@ function updateGhostTrail() {
             currentPlayerRoadSegment = segment
             break
         }
-    }
-
-    ghostTrail.push({ x: player.x, y: player.y })
-
-    if (ghostTrail.length > GHOST_LENGTH) {
-        ghostTrail.shift()
     }
 
     if (currentPlayerRoadSegment) {
@@ -978,7 +1070,7 @@ function updateGhostTrail() {
     }
 }
 
-function updateRain() {
+function updateRain(dt) {
     if (isTransitioningRain) {
         if (isRaining && currentRainCount < rainTargetCount) {
             const dropsToAdd = Math.ceil(
@@ -1008,8 +1100,8 @@ function updateRain() {
     for (let i = 0; i < rainDrops.length; i++) {
         const drop = rainDrops[i]
 
-        drop.x += Math.sin(RAIN_ANGLE) * drop.speed
-        drop.y += Math.cos(RAIN_ANGLE) * drop.speed + road.speed * 0.5
+        drop.x += RAIN_DIRECTION_X * drop.speed * dt
+        drop.y += (RAIN_DIRECTION_Y * drop.speed + road.speed * 0.5) * dt
 
         if (drop.y > GAME_HEIGHT || drop.x > GAME_WIDTH + drop.length) {
             if (
@@ -1036,15 +1128,15 @@ function updateRain() {
     currentRainCount = rainDrops.length
 }
 
-function updateSmoke() {
+function updateSmoke(dt) {
     for (let i = 0; i < smokeParticles.length; i++) {
         const particle = smokeParticles[i]
 
-        particle.x += particle.speedX
-        particle.y += particle.speedY + road.speed
+        particle.x += particle.speedX * dt
+        particle.y += (particle.speedY + road.speed) * dt
 
-        particle.alpha = Math.max(0, particle.alpha - SMOKE_FADE_SPEED)
-        particle.size += SMOKE_GROW_SPEED
+        particle.alpha = Math.max(0, particle.alpha - SMOKE_FADE_SPEED * dt)
+        particle.size += SMOKE_GROW_SPEED * dt
 
         if (
             particle.alpha <= 0 ||
@@ -1059,30 +1151,34 @@ function updateSmoke() {
     }
 }
 
-function update() {
+// dt is the elapsed time in 60 fps frames (1 = 16.7 ms), so all speeds
+// keep their original per-frame meaning independent of the refresh rate.
+function update(dt) {
     if (isGameOver) {
         return
     }
 
+    updateRainToggle(dt)
+
     if (isRaining) {
         rainFilterOpacity = Math.min(
-            rainFilterOpacity + RAIN_FILTER_FADE_SPEED,
+            rainFilterOpacity + RAIN_FILTER_FADE_SPEED * dt,
             RAIN_FILTER_MAX_OPACITY
         )
     } else {
         if (currentRainCount === 0) {
             rainFilterOpacity = Math.max(
-                rainFilterOpacity - RAIN_FILTER_FADE_SPEED,
+                rainFilterOpacity - RAIN_FILTER_FADE_SPEED * dt,
                 0
             )
         }
     }
 
     if (pressedKeys['ArrowLeft']) {
-        player.x -= player.speed
+        player.x -= player.speed * dt
     }
     if (pressedKeys['ArrowRight']) {
-        player.x += player.speed
+        player.x += player.speed * dt
     }
 
     if (player.x < 0) {
@@ -1092,47 +1188,45 @@ function update() {
         player.x = GAME_WIDTH - player.width
     }
 
+    const roadDistance = road.speed * dt
+
     for (let i = 0; i < roadSegments.length; i++) {
-        roadSegments[i].y += road.speed
+        roadSegments[i].y += roadDistance
     }
 
     for (let i = 0; i < obstacles.length; i++) {
-        obstacles[i].y += road.speed
+        obstacles[i].y += roadDistance
     }
     for (let i = 0; i < trees.length; i++) {
-        trees[i].y += road.speed
+        trees[i].y += roadDistance
     }
 
     for (let i = 0; i < ripples.length; i++) {
-        ripples[i].y += road.speed
+        ripples[i].y += roadDistance
     }
 
-    if (roadSegments[0].y > GAME_HEIGHT) {
+    while (roadSegments[0].y > GAME_HEIGHT) {
         roadSegments.shift()
     }
 
-    const lastSegment = roadSegments[roadSegments.length - 1]
-    if (lastSegment && lastSegment.y >= -road.segmentHeight) {
-        roadSegments.push(generateRoadSegment(lastSegment))
+    while (roadSegments[roadSegments.length - 1].y >= -road.segmentHeight) {
+        const newSegment = generateRoadSegment(
+            roadSegments[roadSegments.length - 1]
+        )
+        roadSegments.push(newSegment)
 
-        if (initialSegmentsCount <= 0) {
-            score++
+        score++
 
-            segmentsSinceLastObstacle++
-            if (segmentsSinceLastObstacle >= obstacle_spawn_interval) {
-                obstacles.push(
-                    generateObstacle(roadSegments[roadSegments.length - 1])
-                )
-                segmentsSinceLastObstacle = 0
-            }
+        segmentsSinceLastObstacle++
+        if (segmentsSinceLastObstacle >= obstacle_spawn_interval) {
+            obstacles.push(generateObstacle(newSegment))
+            segmentsSinceLastObstacle = 0
+        }
 
-            segmentsSinceLastEnemy++
-            if (segmentsSinceLastEnemy >= INITIAL_ENEMY_SPAWN_INTERVAL) {
-                enemies.push(
-                    generateEnemyCar(roadSegments[roadSegments.length - 1])
-                )
-                segmentsSinceLastEnemy = 0
-            }
+        segmentsSinceLastEnemy++
+        if (segmentsSinceLastEnemy >= enemy_spawn_interval) {
+            enemies.push(generateEnemyCar(newSegment))
+            segmentsSinceLastEnemy = 0
         }
 
         segmentsSinceLastTree++
@@ -1145,16 +1239,14 @@ function update() {
         if (segmentsSinceLastRipple >= RIPPLE_SPAWN_INTERVAL) {
             const numRipplesToSpawn = Math.floor(Math.random() * 7) + 1
             for (let i = 0; i < numRipplesToSpawn; i++) {
-                ripples.push(generateRipple(lastSegment))
+                ripples.push(generateRipple(newSegment))
             }
             segmentsSinceLastRipple = 0
         }
     }
 
     if (score > 0 && score % 100 === 0 && !speedIncreasedForThisMilestone) {
-        if (road.speed < MAX_ROAD_SPEED) {
-            road.speed = parseFloat((road.speed + 0.5).toFixed(1))
-        }
+        road.speed = Math.min(road.speed + 0.5, MAX_ROAD_SPEED)
         if (obstacle_spawn_interval > MIN_OBSTACLE_SPAWN_INTERVAL) {
             obstacle_spawn_interval -= 4
         }
@@ -1175,28 +1267,14 @@ function update() {
 
     for (let enemy of enemies) {
         if (enemy.isCrashing) {
-            if (enemy.speedY < road.speed) {
-                enemy.speedY *= 1.05
-            } else {
-                enemy.speedY = road.speed
-            }
-
-            const rotationSpeed = 0.04
-            if (enemy.rotationDirection === 1) {
-                enemy.rotation = Math.min(
-                    enemy.rotation + rotationSpeed,
-                    (4 * Math.PI) / 180
-                )
-            } else if (enemy.rotationDirection === -1) {
-                enemy.rotation = Math.max(
-                    enemy.rotation - rotationSpeed,
-                    (-4 * Math.PI) / 180
-                )
-            }
+            enemy.speedY = Math.min(
+                enemy.speedY * Math.pow(1.05, dt),
+                road.speed
+            )
         }
 
-        enemy.y += enemy.speedY
-        enemy.time += 1
+        enemy.y += enemy.speedY * dt
+        enemy.time += dt
 
         const dx = player.x + player.width / 2 - (enemy.x + enemy.width / 2)
         const dy = player.y + player.height / 2 - (enemy.y + enemy.height / 2)
@@ -1214,7 +1292,7 @@ function update() {
 
         const offset =
             Math.sin(enemy.time * enemy.waveFrequency) * enemy.waveAmplitude
-        enemy.x += (enemy.targetX + offset - enemy.x) * 0.1
+        enemy.x += (enemy.targetX + offset - enemy.x) * (1 - Math.pow(0.9, dt))
 
         const segment = roadSegments.find(
             (seg) =>
@@ -1231,13 +1309,13 @@ function update() {
                 if (enemy.x < roadLeft + padding) {
                     enemy.targetX = roadLeft + padding
                     enemy.baseX = roadLeft + padding
-                    enemy.waveAmplitude *= 0.95
-                    enemy.y -= 0.5
+                    enemy.waveAmplitude *= Math.pow(0.95, dt)
+                    enemy.y -= 0.5 * dt
                 } else if (enemy.x + enemy.width > roadRight - padding) {
                     enemy.targetX = roadRight - enemy.width - padding
                     enemy.baseX = roadRight - enemy.width - padding
-                    enemy.waveAmplitude *= 0.95
-                    enemy.y -= 0.5
+                    enemy.waveAmplitude *= Math.pow(0.95, dt)
+                    enemy.y -= 0.5 * dt
                 } else {
                     enemy.targetX = enemy.baseX
                 }
@@ -1248,19 +1326,23 @@ function update() {
             if (checkCollision(enemy, obstacles[i])) {
                 enemyCollision(enemy, obstacles[i])
             }
-            if (safetyCar && checkCollision(enemy, safetyCar)) {
-                enemyCollision(enemy, safetyCar)
-            }
+        }
+        if (safetyCar && checkCollision(enemy, safetyCar)) {
+            enemyCollision(enemy, safetyCar)
         }
 
         if (enemy.isCrashing && enemy.isSmoking) {
-            for (let i = 0; i < 2; i++) {
-                smokeParticles.push(
-                    generateSmokeParticle(
-                        enemy.x + enemy.width / 2,
-                        enemy.y + enemy.height
+            enemy.smokeAccumulator += SMOKE_PARTICLES_PER_FRAME * dt
+            while (enemy.smokeAccumulator >= 1) {
+                enemy.smokeAccumulator--
+                if (smokeParticles.length < MAX_SMOKE_PARTICLES) {
+                    smokeParticles.push(
+                        generateSmokeParticle(
+                            enemy.x + enemy.width / 2,
+                            enemy.y + enemy.height
+                        )
                     )
-                )
+                }
             }
         }
     }
@@ -1290,15 +1372,19 @@ function update() {
         }
     }
 
-    enemies = enemies.filter((enemy) => enemy.y < GAME_HEIGHT)
+    // Enemies can drift upwards while braking at the road edge, so they are
+    // also removed once they are far above the screen.
+    enemies = enemies.filter(
+        (enemy) => enemy.y < GAME_HEIGHT && enemy.y > -ENEMY_HEIGHT * 6
+    )
     trees = trees.filter((tree) => tree.y < GAME_HEIGHT)
     ripples = ripples.filter((ripple) => ripple.y < GAME_HEIGHT)
     obstacles = obstacles.filter((obstacle) => obstacle.y < GAME_HEIGHT)
 
-    updateRain()
-    updateGhostTrail()
-    updateSmoke()
-    updateSafetyCar()
+    updateRain(dt)
+    checkOffRoad()
+    updateSmoke(dt)
+    updateSafetyCar(dt)
 }
 
 function drawSafetyCar() {
@@ -1307,72 +1393,26 @@ function drawSafetyCar() {
     }
 
     const roundedY = Math.round(safetyCar.y)
-    const alpha = 0.4 + 0.35 * Math.sin(performance.now() / 120)
+    const x = Math.round(safetyCar.x)
 
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = `rgba(255, 85, 0, ${alpha.toFixed(2)})`
-    ctx.beginPath()
-    ctx.ellipse(
-        safetyCar.x + safetyCar.width / 2,
-        roundedY + safetyCar.height - 12,
-        safetyCar.width / 3.2,
-        24,
-        0,
-        0,
-        Math.PI * 2
+    drawCenteredSprite(
+        CAR_SHADOW_SPRITE,
+        x + safetyCar.width / 2,
+        roundedY + safetyCar.height - 8
     )
-    ctx.fill()
-    ctx.restore()
-
-    ctx.save()
-    ctx.filter = 'blur(4px)'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.beginPath()
-    ctx.ellipse(
-        safetyCar.x + safetyCar.width / 2,
-        roundedY + safetyCar.height - 8,
-        safetyCar.width / 2.4,
-        16,
-        0,
-        0,
-        Math.PI * 2
-    )
-    ctx.fill()
-    ctx.restore()
-
-    ctx.save()
-    ctx.translate(
-        safetyCar.x + safetyCar.width / 2,
-        roundedY + safetyCar.height / 2
-    )
-    ctx.rotate(safetyCar.rotation)
-    ctx.drawImage(
-        safetyCarImage,
-        -safetyCar.width / 2,
-        -safetyCar.height / 2,
-        safetyCar.width,
-        safetyCar.height
-    )
-
-    ctx.restore()
+    drawExhaustFlame({ ...safetyCar, x: x }, roundedY)
 
     ctx.drawImage(
         safetyCarImage,
-        safetyCar.x,
-        Math.round(safetyCar.y),
+        x,
+        roundedY,
         safetyCar.width,
         safetyCar.height
     )
 }
 
 function drawScanlines() {
-    ctx.save()
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
-    for (let y = 0; y < GAME_HEIGHT; y += 8) {
-        ctx.fillRect(0, y, GAME_WIDTH, 2)
-    }
-    ctx.restore()
+    ctx.drawImage(SCANLINES_SPRITE, 0, 0)
 }
 
 function draw() {
@@ -1389,28 +1429,29 @@ function draw() {
     drawSmokeParticles()
     drawRain()
     drawRainFilter()
-    drawScanlines()
 
     if (isGameOver) {
         drawGameOver()
+    } else if (!gameStarted) {
+        drawStartScreen()
+    } else {
+        drawScores()
     }
+
+    drawScanlines()
 }
 
 function gameLoop() {
-    if (isGameOver || !gameStarted) {
-        draw()
-        if (!isGameOver) {
-            drawStartScreen()
-        }
-        if (!gameStarted && !isGameOver && rainFilterOpacity === 0) {
-            clearTimeout(rainToggleInterval)
-            rainToggleInterval = null
-        }
-        return
+    // Start and game over screens keep looping too, so their texts can blink.
+    if (gameStarted && !isGameOver) {
+        const now = performance.now()
+        // Clamp so a long pause (e.g. a background tab) does not teleport everything.
+        const dt = Math.min((now - lastFrameTime) / FRAME_DURATION, MAX_DELTA)
+        lastFrameTime = now
+
+        update(dt)
     }
 
-    update()
     draw()
-    drawScores()
-    requestAnimationFrame(gameLoop)
+    animationFrameId = requestAnimationFrame(gameLoop)
 }
