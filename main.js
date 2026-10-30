@@ -152,6 +152,7 @@ const SHOULDER_RIPPLE_COLORS = ['#3a6b4a', '#4f8a5f', '#5c4a32', '#36603f']
 let safetyCar = null
 const SAFETY_CAR_ENTRY_DURATION = 90
 const SAFETY_CAR_SWAY_SPEED = 0.03
+const SAFETY_CAR_LOOK_AHEAD = 48
 const SAFETY_CAR_BOB_SPEED = 0.02
 const SAFETY_CAR_BOB_DISTANCE = 12
 
@@ -466,9 +467,14 @@ function createInitialRoadSegments() {
 }
 
 function createSafetyCar() {
+    const spawnY = -ENEMY_HEIGHT
+    const spawnSegment = getSegmentAt(spawnY + ENEMY_HEIGHT / 2)
+
     return {
-        x: GAME_WIDTH / 2 - ENEMY_WIDTH / 2,
-        y: -ENEMY_HEIGHT,
+        // Start on the road center, not the screen center, which can be far
+        // off the road and made the car slide across the track while entering.
+        x: spawnSegment.x + spawnSegment.width / 2 - ENEMY_WIDTH / 2,
+        y: spawnY,
         targetY: 144,
         width: ENEMY_WIDTH,
         height: ENEMY_HEIGHT,
@@ -1011,35 +1017,41 @@ function updateSafetyCar(dt) {
         return
     }
 
-    const lookAheadY = safetyCar.y - 144
+    // Follow the road the car is actually driving on: the segments under it
+    // plus a short look ahead. Aiming at a point far ahead made it cut corners.
+    const lookAheadTop = safetyCar.y - SAFETY_CAR_LOOK_AHEAD
+    const segmentsAround = roadSegments.filter(
+        (segment) =>
+            segment.y + road.segmentHeight > lookAheadTop &&
+            segment.y < safetyCar.y + safetyCar.height
+    )
+    const segmentsUnderCar = segmentsAround.filter(
+        (segment) => segment.y + road.segmentHeight > safetyCar.y
+    )
 
-    let targetSegment = roadSegments[roadSegments.length - 1]
-
-    for (const segment of roadSegments) {
-        if (
-            lookAheadY >= segment.y &&
-            lookAheadY < segment.y + road.segmentHeight
-        ) {
-            targetSegment = segment
-            break
-        }
-    }
+    const roadCenter =
+        segmentsAround.reduce(
+            (sum, segment) => sum + segment.x + segment.width / 2,
+            0
+        ) / segmentsAround.length
 
     safetyCar.swayTime += dt
     const swayOffset = Math.sin(safetyCar.swayTime * SAFETY_CAR_SWAY_SPEED) * 24
 
-    const targetX =
-        targetSegment.x +
-        targetSegment.width / 2 -
-        safetyCar.width / 2 +
-        swayOffset
+    const targetX = roadCenter - safetyCar.width / 2 + swayOffset
 
-    safetyCar.x += (targetX - safetyCar.x) * (1 - Math.pow(0.96, dt))
+    safetyCar.x += (targetX - safetyCar.x) * (1 - Math.pow(0.9, dt))
 
-    const padding = 32
-    const minX = targetSegment.x + padding
+    // Keep the car on the narrowest part of the road directly underneath it.
+    const padding = 16
+    const minX =
+        Math.max(...segmentsUnderCar.map((segment) => segment.x)) + padding
     const maxX =
-        targetSegment.x + targetSegment.width - safetyCar.width - padding
+        Math.min(
+            ...segmentsUnderCar.map((segment) => segment.x + segment.width)
+        ) -
+        safetyCar.width -
+        padding
 
     safetyCar.x = Math.max(minX, Math.min(maxX, safetyCar.x))
 
